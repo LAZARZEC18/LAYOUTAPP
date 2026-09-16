@@ -1,0 +1,25 @@
+[build]
+  command = "npm run build"
+  publish = "out"
+
+# Layout-app submissions: four serverless functions store customer plans in
+# Netlify Blobs. Each declares its own path (/api/submit-layout, /api/layouts,
+# /api/draft, /api/track). The staff endpoints are guarded by the ADMIN_KEY
+# environment variable — set it in Site configuration → Environment variables.
+[functions]
+  directory = "netlify/functions"
+
+[[headers]]
+  for = "/img/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+
+[[headers]]
+  for = "/fonts/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+
+[[headers]]
+  for = "/_next/static/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
