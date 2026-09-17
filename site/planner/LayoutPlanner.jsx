@@ -247,55 +247,15 @@ export default function LayoutPlanner() {
             <div className="step-body">
               <p className="step-lead">Optional. Your rooms are already lit — this is for extras on top.</p>
               <div className="scalewarn" data-scalewarn="" hidden />
+              {/* Four buttons, and that is the whole step. The catalogue picker
+                  that used to sit under them - a category dropdown, a search box
+                  and a scrolling wall of product cards - was a second way to do
+                  what the buttons already do, and every light in it is on a room
+                  card anyway. */}
               <div className="q">
                 <div className="specrow" id="specrow" />
                 <div id="specpanel" />
-                <div className="rsub">Or anything from the catalogue</div>
-                <label className="qlabel" htmlFor="cat">1 · What kind of light?</label>
-                <div className="selwrap">
-                  <select className="sel" id="cat" />
-                </div>
               </div>
-              <div className="q">
-                <div className="qhead">
-                  <label className="qlabel" htmlFor="prodsearch">2 · Which one?</label>
-                  <span className="qcount" id="prodcount" />
-                </div>
-                <input className="txt" id="prodsearch" placeholder="Search name, code or wattage" autoComplete="off" />
-                <div className="cards" id="prodcards" />
-              </div>
-              <div className="q">
-                <label className="qlabel">3 · How many?</label>
-                <div className="chips" id="qtychips" />
-              </div>
-              <div className="q" id="arrq">
-                <label className="qlabel" htmlFor="arr">4 · Which way do they run?</label>
-                <div className="selwrap">
-                  <select className="sel" id="arr">
-                    <option value="row">Across →</option>
-                    <option value="col">Up and down ↓</option>
-                    <option value="line">Along a line I drag</option>
-                  </select>
-                </div>
-              </div>
-              <button type="button" className="act go" id="btn-place">
-                <svg viewBox="0 0 24 24">
-                  <circle cx="12" cy="12" r="4" />
-                  <path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2" />
-                </svg>
-                <span id="placelabel">Put them on the plan</span>
-              </button>
-              <p className="step-lead" style={{marginTop:'8px'}}>Press the green button, then click the plan.</p>
-              <details className="moreinfo" id="place-more">
-                <summary>More information</summary>
-                <div className="moreinfo-body">
-                  <div className="hint" id="cathint" />
-                  <details className="whyd">
-                    <summary>Why this spacing</summary>
-                    <div className="teach" id="teach-place" style={{marginTop:'6px'}} />
-                  </details>
-                </div>
-              </details>
             </div>
           </section>
           {/* STEP 5 */}
