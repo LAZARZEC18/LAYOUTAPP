@@ -146,7 +146,7 @@ export default function LayoutPlanner() {
               <i className="chev" />
             </button>
             <div className="step-body">
-              <p className="step-lead">Tell it what you are going to measure, then put 2 points across that thing on the plan. That is the scale set — everything else sizes itself from there. <b>A real measurement off the house is the most accurate thing you can give it.</b></p>
+              <p className="step-lead">Pick something on the plan you know the real length of, drag the 2 red points across it, and press Done.</p>
               <div id="paperbox" />
               <div className="q">
                 <label className="qlabel" htmlFor="calref">What are you measuring?</label>
@@ -171,10 +171,8 @@ export default function LayoutPlanner() {
                   </div>
                 </div>
                 <div className="hint" style={{margin:'9px 0 0'}}>
-                  <b>Measure something for real if you can — it is far more accurate than guessing.</b>{' '}
-                  Go and measure a wall, a bench or a hallway in the house and type that length in.
-                  If you cannot get to it, a standard internal door is 820 mm and is on nearly every plan.
-                  The longer the thing you measure, the more accurate the whole plan.
+                  <b>Measure it for real if you can — a tape measure beats a guess every time.</b>{' '}
+                  A door is the safe fallback: nearly every plan has one and they are 820 mm.
                 </div>
                 <button type="button" className="act pri" id="btn-cal" style={{marginTop:'9px'}} disabled>
                   <svg viewBox="0 0 24 24">
@@ -182,7 +180,7 @@ export default function LayoutPlanner() {
                   </svg>
                   Put 2 points on the plan
                 </button>
-                <button type="button" className="act go sm" id="btn-calapply" style={{marginTop:'8px',display:'none'}} disabled>Apply scale</button>
+                <button type="button" className="act go" id="btn-calapply" style={{marginTop:'8px',display:'none'}} disabled>Done — use this scale</button>
               </div>
               <div className="q" id="scalebox" />
               <div className="q">

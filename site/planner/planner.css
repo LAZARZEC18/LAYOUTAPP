@@ -955,3 +955,9 @@
   body>*:not(.gh-planner){display:none!important}
   body{overflow:visible!important;display:block!important;background:#fff}
 }
+
+/* The end of a star run you pull to change the spacing. A dashed ring, not a
+   second dot: two dots the same size read as two lights and people grab the
+   wrong one, the same mistake the wall-light aim handle used to make. */
+.gh-planner .fx-pull{fill:none;stroke:var(--glow,#00c400);stroke-width:1.6;
+  stroke-dasharray:3 3;opacity:.85;pointer-events:none}
