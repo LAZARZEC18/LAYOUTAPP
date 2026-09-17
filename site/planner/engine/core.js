@@ -1291,11 +1291,30 @@ function renderScaleBox(){
   document.getElementById('btn-tape').onclick=function(){ setTool(S.tool==='measure'?'select':'measure'); };
 }
 
+/* Steps 01 and 02 are done once, at the start, and then they are just two
+   rows in the way of the one you are actually using. Once the plan is in and
+   the scale is set they fold away into a single line at the top, which puts
+   them back if anything needs changing. */
+var setupShown=false;
+function renderSetupBar(){
+  var bar=document.getElementById('setupbar'); if(!bar) return;
+  var done = S.plan.loaded && !!S.mpp && !setupShown;
+  step(1).classList.toggle('gone',done);
+  step(2).classList.toggle('gone',done);
+  if(!done){ bar.hidden=true; bar.innerHTML=''; return; }
+  bar.hidden=false;
+  bar.innerHTML='<span class="sb-t">'+esc(S.plan.name||'Plan loaded')+'</span>'+
+    '<span class="sb-v">'+(1/S.mpp).toFixed(1)+' px/m</span>'+
+    '<button type="button" class="linkbtn" id="setup-change">Change</button>';
+  var b=document.getElementById('setup-change');
+  if(b) b.onclick=function(){ setupShown=true; renderSetupBar(); openStep(1); };
+}
 function renderSteps(){
   $('#st1').textContent=S.plan.loaded?(S.plan.name||'Plan loaded'):'No plan yet';
   step(1).classList.toggle('done',S.plan.loaded);
   $('#st2').textContent=S.mpp?(1/S.mpp).toFixed(1)+' px/m':'Not set';
   step(2).classList.toggle('done',!!S.mpp);
+  renderSetupBar();
   var doneRooms=S.rooms.filter(roomIsDone).length;
   $('#st3').textContent=!S.rooms.length ? 'No rooms yet'
     : doneRooms===S.rooms.length ? S.rooms.length+(S.rooms.length===1?' room done':' rooms done')
@@ -3701,6 +3720,8 @@ function doPrint(){
    UI wiring
    ============================================================ */
 function openStep(n){
+  /* Moving on from the setup puts it away again. */
+  if(n>=3 && setupShown && S.plan.loaded && S.mpp){ setupShown=false; renderSetupBar(); }
   $$('.step').forEach(function(s){s.classList.toggle('open',+s.dataset.step===n);});
 }
 
@@ -3941,6 +3962,11 @@ function wire(){
       var s=h.parentNode, was=s.classList.contains('open');
       $$('.step').forEach(function(x){x.classList.remove('open');});
       if(!was) s.classList.add('open');
+      /* Opening one of the working steps means the setup is behind you again,
+         so 01 and 02 fold back down out of the way. */
+      if(+s.dataset.step>=3 && setupShown && S.plan.loaded && S.mpp){
+        setupShown=false; renderSetupBar();
+      }
     };
   });
 
