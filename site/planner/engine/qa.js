@@ -153,14 +153,18 @@ window.__GHQA=function(){
   /* ---- catalogue integrity ---- */
   ok('every product carries an id and a category',
      G.PRODUCTS.every(function(p){return p.id&&p.cat;}),'missing fields');
-  ok('every product category has a picker entry, or is kept as data only',
-     (function(){
-       var known=G.CATS.map(function(c){return c.id;});
-       return G.PRODUCTS.every(function(p){
-         return known.indexOf(p.cat)>-1 || !!G.DATA_ONLY_CATS[p.cat];
-       });
-     })(),'unmapped category');
-  eq('downlights category holds 35 products',G.catProducts('downlights').length,35);
+  /* KEEP_CATS is what the planner keeps in its catalogue; CATS is only the
+     extras picker list. Downlights are in the first and not the second - they
+     light every room but you add an extra one from its own button. */
+  ok('every product is in a category the planner keeps, or is kept as data only',
+     G.PRODUCTS.every(function(p){
+       return G.KEEP_CATS.indexOf(p.cat)>-1 || !!G.DATA_ONLY_CATS[p.cat];
+     }),'unmapped category');
+  ok('downlights are still in the catalogue even though the picker no longer lists them',
+     G.catProducts('downlights').length>0 && G.CATS.every(function(c){return c.id!=='downlights';}),
+     G.catProducts('downlights').length+' downlights, picker has '+G.CATS.length+' kinds');
+  eq('the picker offers the seven downlights the rooms choose between',
+     G.catProducts('downlights').length,7);
   ok('every room brief says whether it takes downlights',
      Object.keys(G.ROOMS).every(function(k){return typeof G.ROOMS[k].dl==='boolean';}),'missing dl flag');
   ok('no room brief tells people to leave gaps for lamps or strip',
@@ -170,7 +174,8 @@ window.__GHQA=function(){
   /* ---- app behaviour against the live DOM ---- */
   var d=document;
   eq('category picker is populated',d.querySelector('#cat').options.length,G.CATS.length);
-  eq('every downlight in the category gets a card',d.querySelectorAll('#prodcards .pcard').length,35);
+  eq('every product in the picked category gets a card',
+     d.querySelectorAll('#prodcards .pcard').length,G.visibleProducts().length);
   ok('every downlight card carries the product photo from the website',
      /* the single-file build inlines photos as data URIs, the multi-file build
         links them from /img - accept either, reject a blank or a placeholder */
@@ -306,15 +311,16 @@ window.__GHQA=function(){
   G.S.fixtures=[];G.S.rooms=[];G.S.sel=[];G.S.mpp=null;G.renderAll();
 
   /* ---- the catalogue the planner offers ---- */
-  eq('the picker offers five kinds of fitting',G.CATS.length,5);
+  eq('the picker offers four kinds of fitting, downlights having their own button',
+     G.CATS.length,4);
   ok('and none of the categories that are not laid out on a plan',
      ['track','sensors','outdoor','flood','landscape','highbay','industrial',
       'emergency','transformers','strip'].every(function(c){
         return G.CATS.every(function(x){return x.id!==c;});
      }),'a removed category is still offered');
-  ok('nothing in the catalogue sits in a category the picker cannot show, bar the data-only ones',
+  ok('nothing in the catalogue sits in a category nothing can reach, bar the data-only ones',
      G.PRODUCTS.every(function(p){
-       return G.CATS.some(function(c){return c.id===p.cat;}) || !!G.DATA_ONLY_CATS[p.cat];
+       return G.KEEP_CATS.indexOf(p.cat)>-1 || !!G.DATA_ONLY_CATS[p.cat];
      }),'orphan product');
 
   /* ---- strip lighting is out of the planner, but not out of the data ---- */
@@ -1239,7 +1245,53 @@ window.__GHQA=function(){
        !S.roomEdit[oA.id],'still flagged for editing');
     S.rooms=[]; S.roomOpen={}; S.roomEdit={};
 
-    /* the fan question, while it is still blocking the room */
+      /* ---- step 4: downlights are a button, and a star run sets its own gap ---- */
+    ok('downlights are a one-click button in step 4, not a catalogue list',
+       !!G.SPECIAL.downlight && G.SPECIAL.downlight.pid==='DL9ES-FLAT-HL' &&
+       !G.SPECIAL.downlight.choices && !G.SPECIAL.downlight.counts,
+       'the downlight button is missing or asks which one');
+    ok('and the catalogue list under it no longer repeats them',
+       G.CATS.every(function(c){return c.id!=='downlights';}),'downlights still listed');
+    ok('using the downlight button leaves the catalogue dropdown on a category it can show',
+       (function(){
+         G.setPick({cat:'ceiling'});
+         G.setSpecial('downlight');
+         var okCat=G.CATS.some(function(c){return c.id===S.pick.cat;});
+         var pid=S.pick.pid;
+         G.setSpecial(null);
+         return okCat && pid==='DL9ES-FLAT-HL';
+       })(),S.pick.cat+' / '+S.pick.pid);
+
+    (function(){
+      /* A star run re-spaces from its far end: the first light stays put and
+         the rest lay out evenly along the line to where the finger is. */
+      S.fixtures=[]; S.sel=[]; S.mpp=0.01;
+      G.setPick({cat:'star',pid:'DL03-ALL-1',qty:4,arr:'row'});
+      G.addFixtures(G.groupPointsAt(500,500));
+      var run=S.fixtures.filter(function(f){return G.isStarLight(G.byId(f.pid));});
+      eq('a star run goes down as one group',run.length,4);
+      ok('every light in it carries the same group',
+         run.every(function(f){return f.grp&&f.grp===run[0].grp;}),'not grouped');
+      var end=G.starStretchEnd(run);
+      ok('the end you pull is the light furthest from the first one',
+         end===run[3],'wrong end');
+      var gap=G.spreadStarRun(run[0].grp,{x:run[0].x,y:run[0].y},{x:run[0].x+300,y:run[0].y});
+      var xs=S.fixtures.filter(function(f){return f.grp===run[0].grp;})
+                       .map(function(f){return f.x;}).sort(function(a,b){return a-b;});
+      ok('pulling it re-spaces the whole run evenly',
+         Math.abs((xs[1]-xs[0])-(xs[2]-xs[1]))<=1 && Math.abs((xs[2]-xs[1])-(xs[3]-xs[2]))<=1,
+         xs.join(','));
+      ok('the first light in the run does not move',xs[0]===run[0].x,xs[0]+' vs '+run[0].x);
+      near('and the new gap is the distance you dragged, split evenly',gap,1.0,0.02);
+      ok('the gap is clamped so a stray drag cannot wreck the run',
+         (function(){
+           var wide=G.spreadStarRun(run[0].grp,{x:run[0].x,y:run[0].y},{x:run[0].x+9000,y:run[0].y});
+           return wide!==null && wide<=2.51;
+         })(),'no upper clamp');
+      S.fixtures=[]; S.sel=[];
+    })();
+
+  /* the fan question, while it is still blocking the room */
     S.rooms=[]; S.fixtures=[]; S.roomPid={}; S.roomFan={}; S.roomComfort={}; S.roomOpen={};
     var aBed={id:'aB',type:'bedroom',x:0,y:0,w:3.5*PX,h:4*PX};
     S.rooms=[aBed]; S.roomAskFan[aBed.id]=true; S.roomOpen[aBed.id]=true;

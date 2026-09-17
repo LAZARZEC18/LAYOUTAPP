@@ -519,8 +519,11 @@ var ROOMS={
 };
 
 
+/* Downlights are their own button in step 4 now - one click, one light, no
+   product to choose. Having them in this list as well meant scrolling seven
+   near-identical 90 mm fittings to drop a single extra light, which is the
+   one thing step 4 is for. The full range is still on every room card. */
 var CATS=[
-  {id:'downlights', label:'Downlights',           hint:'Recessed into the ceiling. The default for general lighting through a house.'},
   {id:'ceiling',    label:'Ceiling & wall lights',hint:'Surface mounted. Use where you cannot recess — concrete ceilings, rentals, low voids.'},
   {id:'batten',     label:'Battens',              hint:'Linear surface fittings. Cheap even light for garages, laundries and sheds.'},
   {id:'star',       label:'Star lights',          hint:'Small 3W points. Alfresco ceilings, feature nooks, stair risers.'},
@@ -547,13 +550,18 @@ var WALL_KEEP=['W10-CCT-BW','SEAFORD-UPDOWN-WAL','WL12-18-CCT-SENSOR','WL10R-40K
    in the planner: not in the extras picker, not in a room's light list, not in
    the search. */
 var DATA_ONLY_CATS={strip:1};
+var KEEP_CATS=['downlights','ceiling','batten','star','fans'];
 (function(){
   WALL_KEEP.forEach(function(id){
     var p=PRODUCTS.filter(function(x){return x.id===id;})[0];
     if(p) p.cat='ceiling';
   });
+  /* What the planner keeps in its catalogue. This is NOT the extras picker
+     list: downlights left that list when they got their own button in step 4,
+     but every room on a plan is lit with one, so they stay in the catalogue.
+     Culling by the picker list deleted every downlight in the app. */
   var keep={};
-  CATS.forEach(function(c){ keep[c.id]=1; });
+  KEEP_CATS.forEach(function(c){ keep[c]=1; });
   for(var i=PRODUCTS.length-1;i>=0;i--)
     if(!keep[PRODUCTS[i].cat] && !DATA_ONLY_CATS[PRODUCTS[i].cat]) PRODUCTS.splice(i,1);
 })();
@@ -571,7 +579,7 @@ var S={
   fixtures:[],rooms:[],
   sel:[],
   seq:1,
-  pick:{cat:'downlights',pid:null,qty:4,arr:'row',q:''},
+  pick:{cat:'ceiling',pid:null,qty:4,arr:'row',q:''},
   ownName:'', ownPrice:'',            // the customer's own pendant
   roomOpen:{},
   roomEdit:{},                    // room id -> they asked to open a finished room back up
@@ -1153,7 +1161,12 @@ function renderFixtures(){
         '<circle cx="'+ah.x.toFixed(1)+'" cy="'+ah.y.toFixed(1)+'" r="'+(ar*2.4).toFixed(1)+'" fill="transparent"/>'+
       '</g>';
     }
-    marks+='<g class="fx'+(on?' sel':'')+'" data-id="'+f.id+'">'+aim+
+    /* The end of a star run you pull to set the gap. Marked only while the
+       run is selected, so it is findable without shouting at you. */
+    var pull=(on && isStarStretchEnd(f))
+      ? '<circle class="fx-pull" cx="'+f.x+'" cy="'+f.y+'" r="'+(rPix+11).toFixed(1)+'"/>'
+      : '';
+    marks+='<g class="fx'+(on?' sel':'')+'" data-id="'+f.id+'">'+aim+pull+
       (on?'<circle class="fx-ring" cx="'+f.x+'" cy="'+f.y+'" r="'+(rPix+7)+'"/>':'')+
       scaleStrokes(symbolSvg(symbolFor(p.cat,p),f.x,f.y,rPix,col,p,f.rot), S.zoom)+
       (S.showLabels?'<text class="fx-lab" x="'+(f.x+rPix+3)+'" y="'+(f.y-rPix-2)+'" font-size="'+labelSize+'">'+esc(f.pid)+'</text>':'')+
@@ -1311,13 +1324,11 @@ function renderScaleBox(){
      downstream, so there are three ways back to it: drag the points again,
      check a known length with the tape, or type the number straight in. */
   w.innerHTML=
-    '<label class="qlabel">Scale in use</label>'+
-    '<div class="hint" style="margin:0 0 8px">The plan covers <b>'+(S.plan.w*S.mpp).toFixed(1)+' × '+
-      (S.plan.h*S.mpp).toFixed(1)+' m</b>. Does that sound right for this building?'+
-      (S.measure?' Last measured: <b>'+S.measure.toFixed(2)+' m</b>.':'')+'</div>'+
+    '<div class="hint" style="margin:0 0 8px">Scale set. The plan covers <b>'+(S.plan.w*S.mpp).toFixed(1)+' × '+
+      (S.plan.h*S.mpp).toFixed(1)+' m</b> — does that sound right?</div>'+
     '<button type="button" class="act pri sm" id="btn-redoscale" style="width:100%">Drag the 2 points again</button>'+
-    '<button type="button" class="act ghost sm" id="btn-tape" style="width:100%;margin-top:6px">Check a known length with the tape</button>'+
-    '<details class="whyd" style="margin-top:8px"><summary>Type the number instead</summary>'+
+    '<details class="whyd" style="margin-top:8px"><summary>Other ways to fix the scale</summary>'+
+      '<button type="button" class="act ghost sm" id="btn-tape" style="width:100%;margin-top:8px">Check a known length with the tape</button>'+
       '<div class="row2" style="margin-top:8px"><input class="txt" id="pxm" type="number" step="0.1" min="1" value="'+(1/S.mpp).toFixed(1)+'">'+
       '<span class="hint" style="align-self:center">pixels per metre</span></div>'+
     '</details>';
@@ -2584,6 +2595,57 @@ function drawGhost(pts,snap){
 }
 function snapTol(){ return 9/S.zoom; }
 
+/* ---------- a star run is a line, not a rigid block ----------
+   Six star lights go in as one run and want to stay evenly spaced, so dragging
+   one of them about on its own only ever made a mess. The run has one end you
+   pull: the light furthest from the first one placed. Drag it and the run
+   re-spaces itself - every light evenly along the line from the first one to
+   your finger - so you set the gap by eye and they all follow. Drag any other
+   light in the run and the whole run moves, the way it always did. */
+var STAR_GAP_MIN=0.12, STAR_GAP_MAX=2.5;   /* metres between two star lights */
+function starRunOf(f){
+  if(!f||!f.grp||!isStarLight(byId(f.pid))) return null;
+  var run=S.fixtures.filter(function(x){return x.grp===f.grp;});
+  return run.length>1 ? run : null;
+}
+/* The end you pull: furthest from the first light placed in the run. */
+function starStretchEnd(run){
+  var a=run[0], best=null;
+  run.forEach(function(f){
+    if(f===a) return;
+    var d=Math.hypot(f.x-a.x,f.y-a.y);
+    if(!best||d>best.d) best={d:d,f:f};
+  });
+  return best?best.f:null;
+}
+function isStarStretchEnd(f){
+  var run=starRunOf(f);
+  return !!run && starStretchEnd(run)===f;
+}
+/* Lay the whole run out from its anchor towards pt, evenly spaced.
+   Returns the new gap in metres. */
+function spreadStarRun(grp,anchor,pt){
+  var run=S.fixtures.filter(function(x){return x.grp===grp;});
+  var n=run.length; if(n<2) return null;
+  var dx=pt.x-anchor.x, dy=pt.y-anchor.y, len=Math.hypot(dx,dy);
+  if(len<1) return null;
+  var sp=len/(n-1);
+  /* Too tight and they read as one smudge, too wide and it stops reading as a
+     run at all, so both ends are clamped. */
+  sp=Math.max(m2px(STAR_GAP_MIN), Math.min(m2px(STAR_GAP_MAX), sp));
+  var ux=dx/len, uy=dy/len;
+  /* Keep whatever order they already sit in along the line, so nothing jumps
+     past its neighbour halfway through the drag. */
+  run.sort(function(p,q){
+    return ((p.x-anchor.x)*ux+(p.y-anchor.y)*uy)-((q.x-anchor.x)*ux+(q.y-anchor.y)*uy);
+  });
+  run.forEach(function(f,i){
+    f.x=Math.round(anchor.x+ux*sp*i);
+    f.y=Math.round(anchor.y+uy*sp*i);
+  });
+  return S.mpp ? sp*S.mpp : null;
+}
+
 
 /* ============================================================
    Special lights - star lights, wall lights, your own pendant
@@ -2592,14 +2654,26 @@ function snapTol(){ return 9/S.zoom; }
    what to do. Everything routes into the normal placement machinery.
    ============================================================ */
 var SPECIAL={
+  downlight:{
+    label:'Downlights', pid:'DL9ES-FLAT-HL',
+    icon:'<svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true">'+
+         '<circle cx="12" cy="12" r="8.2" fill="none" stroke="currentColor" stroke-width="1.5"/>'+
+         '<circle cx="12" cy="12" r="3.1" fill="currentColor"/>'+
+         '</svg>',
+    blurb:'One downlight, wherever you want an extra one. Your rooms are already lit \u2014 this is for the odd extra on top.',
+    steps:['Click the plan where you want it.',
+           'Drag it to move it.'],
+    note:'The same 90 mm downlight the rooms use. To change what a whole room gets, use that room\u2019s card instead.'
+  },
   star:{
     label:'Star lights', icon:'✦', pid:'DL03-ALL-1',
     blurb:'Tiny 30 mm points in the ceiling — a starlit sky. 3 W each, so they are an effect, not the room\'s light.',
     steps:['How many.',
            'Which way they run.',
-           'Click the plan — they all go down together and move as one.'],
+           'Click the plan — they all go down together.',
+           'Drag the end one (dashed ring) to set how far apart they are.'],
     counts:[1,2,3,4,5,6],
-    note:'They will not light a room on their own — keep the normal downlights as well.'
+    note:'Drag any other light in the run to slide the whole run. They will not light a room on their own — keep the normal downlights as well.'
   },
   wall:{
     /* Outdoor only. Inside a house a wall light is a decorative extra that
@@ -2740,7 +2814,12 @@ function applySpecial(){
       S.pick.arr=(specArr==='col')?'col':'row';
     }else{ S.pick.qty=1; S.pick.arr='row'; }
   }
-  S.pick.cat=(byId(S.pick.pid)||{}).cat||S.pick.cat;
+  /* The picker's category follows the product, but only where the picker can
+     show it. The Downlights button places a downlight and downlights are not
+     in that list any more, so leaving it set there made the dropdown say one
+     thing and the list under it show another. */
+  var pc=(byId(S.pick.pid)||{}).cat;
+  if(pc && CATS.some(function(c){return c.id===pc;})) S.pick.cat=pc;
   showHowTo(s.label, s.blurb, s.steps.slice());
   setTool('place');
   if(typeof renderTools==='function') renderTools();
@@ -3033,7 +3112,12 @@ function refreshCalApply(){
   var ready = !!S.cal.px && calReady();
   ap.disabled=!ready;
   ap.style.display=ready?'':'none';
-  ap.textContent='Use this scale \u2192';
+  ap.textContent='Done \u2014 use this scale \u2192';
+  /* One button at a time. "Now drag the 2 red points" sitting above a green
+     "use this scale" gave two instructions at once and neither of them looked
+     like the finish - the step read as three things to do instead of one. */
+  var cb=document.getElementById('btn-cal');
+  if(cb) cb.style.display=ready?'none':'';
 }
 function armCalHandles(){
   if(!el||!el.canvas||!el.gGuide) return;
@@ -3096,6 +3180,16 @@ function onDown(e){
          Shift-click still reaches an individual member. */
       var gf=S.fixtures.filter(function(f){return f.id===id;})[0];
       S.sel=(gf&&gf.grp)?S.fixtures.filter(function(f){return f.grp===gf.grp;}).map(function(f){return f.id;}):[id];
+    }
+    /* The far end of a star run changes the spacing rather than moving the
+       run. Every other light in it still moves the whole run. */
+    var sf=S.fixtures.filter(function(f){return f.id===id;})[0];
+    var srun=starRunOf(sf);
+    if(srun && !e.shiftKey && starStretchEnd(srun)===sf){
+      snapshot();
+      drag={mode:'spread',grp:sf.grp,anchor:{x:srun[0].x,y:srun[0].y}};
+      renderFixtures();renderReadout();
+      return;
     }
     snapshot();
     drag={mode:'move',a:pt,moved:false,orig:S.fixtures.filter(function(f){return S.sel.indexOf(f.id)>-1;}).map(function(f){return {id:f.id,x:f.x,y:f.y};})};
@@ -3162,6 +3256,14 @@ function onMove(e){
     if(drag.mode==='line'&&S.mpp){/* live length shown in readout */}
     return;}
   if(drag.mode==='room'||drag.mode==='marquee'){drag.b=pt;guideRect(drag.a,pt,drag.mode==='room'?'room-rect drag':'guide drag');return;}
+  if(drag.mode==='spread'){
+    var sgap=spreadStarRun(drag.grp,drag.anchor,pt);
+    drag.gap=sgap;
+    renderFixtures();
+    guideClear();
+    if(sgap!=null) guideLabel(pt.x,pt.y-6,sgap.toFixed(2)+' m apart');
+    return;
+  }
   if(drag.mode==='move'){
     var dx=pt.x-drag.a.x, dy=pt.y-drag.a.y;
     if(Math.abs(dx)>1||Math.abs(dy)>1) drag.moved=true;
@@ -3298,6 +3400,13 @@ function onUp(e){
     guideClear(); renderAll();
     var af=S.fixtures.filter(function(f){return f.id===d.id;})[0];
     if(af) toast('Aimed '+Math.round(af.rot)+'\u00b0 — drag the green dot again to change it');
+    return;
+  }
+  if(d.mode==='spread'){
+    guideClear();
+    renderAll();
+    toast(d.gap!=null ? 'Star lights now '+d.gap.toFixed(2)+' m apart'
+                      : 'Star run re-spaced');
     return;
   }
   if(d.mode==='move'){
@@ -3764,12 +3873,18 @@ function refreshCatCounts(){
     if(cat.options[i]) cat.options[i].textContent=c.label+' ('+catCount(c.id)+')';
   });
 }
+/* A plan saved before downlights left the extras list still carries
+   cat:'downlights'. Without this the dropdown rendered blank while the list
+   under it showed downlights - the two disagreeing about what you had picked. */
+function validPickCat(){
+  return CATS.some(function(c){return c.id===S.pick.cat;}) ? S.pick.cat : CATS[0].id;
+}
 function buildSelects(){
   var cat=$('#cat');
   cat.innerHTML=CATS.map(function(c){
     return '<option value="'+c.id+'">'+c.label+' ('+catCount(c.id)+')</option>';
   }).join('');
-  cat.value=S.pick.cat;
+  cat.value=validPickCat();
   var rt=$('#rtype');
   rt.innerHTML=Object.keys(ROOMS).map(function(k){
     return '<option value="'+k+'">'+ROOMS[k].label+'</option>';
@@ -4472,18 +4587,18 @@ window.__GH={
   fillPoints:fillPoints,gridInRoom:gridInRoom,pointInRect:pointInRect,incGST:incGST,money:money,
   bomLines:bomLines,bomTotals:bomTotals,ROOMS:ROOMS,CATS:CATS,PRODUCTS:PRODUCTS,S:S,
   roomName:roomName,renderDoneRooms:renderDoneRooms,
-  isStarLight:isStarLight,isWallLight:isWallLight,STAR_SPACING_M:STAR_SPACING_M,groupSelected:groupSelected,ungroupSelected:ungroupSelected,showFaq:showFaq,
+  isStarLight:isStarLight,isWallLight:isWallLight,starRunOf:starRunOf,starStretchEnd:starStretchEnd,spreadStarRun:spreadStarRun,STAR_SPACING_M:STAR_SPACING_M,groupSelected:groupSelected,ungroupSelected:ungroupSelected,showFaq:showFaq,
   isBigRoom:isBigRoom,roomComfort:roomComfort,applyComfort:applyComfort,COMFORT:COMFORT,
   wallFacing:wallFacing,rotateSelected:rotateSelected,resetAim:resetAim,
   aimTowards:aimTowards,aimHandlePt:aimHandlePt,aimHandleAt:aimHandleAt,ROT_STEP:ROT_STEP,
   smartLights:smartLights,pickerGroupProducts:pickerGroupProducts,
-  DATA_ONLY_CATS:DATA_ONLY_CATS,PICKER_MAIN:PICKER_MAIN,pickerLabel:pickerLabel,plainName:plainName,
+  DATA_ONLY_CATS:DATA_ONLY_CATS,KEEP_CATS:KEEP_CATS,PICKER_MAIN:PICKER_MAIN,pickerLabel:pickerLabel,plainName:plainName,
   symbolSvg:symbolSvg,fxKind:fxKind,
   addFixtures:addFixtures,undo:undo,snapshot:snapshot,byId:byId,catProducts:catProducts,
   setPick:function(o){
     Object.keys(o).forEach(function(k){S.pick[k]=o[k];});
     if(document.getElementById('cat')){
-      document.getElementById('cat').value=S.pick.cat;
+      document.getElementById('cat').value=validPickCat();
       refreshProducts();
       document.getElementById('arr').value=S.pick.arr;
       renderPlaceTeach();
