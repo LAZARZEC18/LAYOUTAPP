@@ -382,8 +382,14 @@ function beamDiagram(sel){
 
   function halfWidth(beam,dropM){ return Math.tan(Math.min(beam,170)/2*Math.PI/180)*dropM*PX; }
 
-  var beam=G.parseBeam(sel.p.beam)||60;
-  if(sel.id==='DL9ES-FLAT-HL') beam=120;  /* diagram only: draw the wide fitting at 120deg; spec + calcs stay 100 */
+  /* Diagram only. The wide fitting is drawn at 150 deg so the difference
+     against the 60 deg low glare is unmistakable at a glance; its printed
+     spec and every calculation still use its real 100 deg. */
+  function diagramBeam(id,p){
+    var b=G.parseBeam(p&&p.beam)||60;
+    return id==='DL9ES-FLAT-HL' ? 150 : b;
+  }
+  var beam=diagramBeam(sel.id,sel.p);
   var hwFloor=halfWidth(beam,H), hwBench=halfWidth(beam,H-wp), hwEye=halfWidth(beam,H-EYE_H);
   var glare=hwEye>PERSON_X_M*PX;      /* is his face inside the beam? */
 
@@ -403,7 +409,7 @@ function beamDiagram(sel){
   /* the other two fittings, dashed, so the difference reads at a glance */
   BEAM_PICKS.forEach(function(b){
     if(b.id===sel.id) return;
-    var p=G.byId(b.id), ob=G.parseBeam(p.beam); if(!ob) return;
+    var p=G.byId(b.id), ob=diagramBeam(b.id,p); if(!ob) return;
     var ow=halfWidth(ob,H);
     s+='<polygon points="'+cx+','+top+' '+(cx-ow)+','+floorY+' '+(cx+ow)+','+floorY+'" '+
        'fill="none" stroke="#8C8C7E" stroke-width="1.5" stroke-dasharray="5 5" opacity=".65"/>';

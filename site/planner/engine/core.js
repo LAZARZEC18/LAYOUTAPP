@@ -239,6 +239,11 @@ function rowPoints(n,spacing){
   for(i=0;i<n;i++) pts.push({x:-span/2+i*spacing, y:0});
   return pts;
 }
+/* The same run, turned on its side. "In a block" and "one at a time" are gone:
+   a group of extras is a line with a direction, and it moves as one. */
+function colPoints(n,spacing){
+  return rowPoints(n,spacing).map(function(q){ return {x:0,y:q.x}; });
+}
 function gridPoints(n,spacing){
   var cols=Math.ceil(Math.sqrt(n)), rows=Math.ceil(n/cols), pts=[], k=0,r,c;
   for(r=0;r<rows;r++) for(c=0;c<cols;c++){
@@ -276,9 +281,12 @@ function fillPoints(w,h,spacing,off){
  * closest to the rule of thumb, allowing the count to move by one or two, and
  * only fall back to a ragged last row if nothing sensible fits.
  */
-function gridInRoom(w,h,n,off){
+/* `exact` is for a room whose count is pinned rather than suggested - a
+   bathroom is two lights whatever it measures, so the grid search is not
+   allowed to quietly settle on one. */
+function gridInRoom(w,h,n,off,exact){
   if(n<=0) return [];
-  off=Math.min(off, w/3, h/3);
+  off=exact ? Math.min(off, w/4, h/4) : Math.min(off, w/3, h/3);
   var uw=Math.max(0,w-2*off), uh=Math.max(0,h-2*off);
   var target=spacingFor(S.ceiling, 100);      /* the spacing we aim for */
 
@@ -288,7 +296,7 @@ function gridInRoom(w,h,n,off){
       var total=c*r;
       /* Small rooms must not creep up: one extra fitting in a bedroom is a
          real cost. Bigger rooms can move by two to square the grid off. */
-      var slack = n<=4 ? 1 : 2;
+      var slack = exact ? 0 : (n<=4 ? 1 : 2);
       if(Math.abs(total-n)>slack) continue;
       var sx = c===1 ? w : uw/(c-1);
       var sy = r===1 ? h : uh/(r-1);
@@ -464,12 +472,15 @@ var ROOMS={
              note:'Centre the grid on the table, not on the room, if the table sits off to one side.'},
   bedroom : {label:'Bedroom',            short:'Bed', cct:'3000K warm white', wet:false, dl:true, fan:true, lowGlareOnly:true,
              note:'Keep a downlight off the pillow line. You will be lying underneath it. Most bedrooms end up with a fan \u2014 if yours does, the fan light does the job and the downlights come out.'},
-  bathroom: {label:'Bathroom / ensuite', short:'Bath', cct:'4000K natural white', wet:true, dl:true, max:2, exhaust:true,
+  /* Two lights in the bathroom, and the exhaust is an extra you tick if you
+     want one - not a three-way question about fans before the room is lit. */
+  bathroom: {label:'Bathroom / ensuite', short:'Bath', cct:'4000K natural white', wet:true, dl:true, min:2, max:2, exhaust:true,
              rec:'C25-CCT-PA',
-             note:'One or two downlights at most, and the real answer is a 25\u2009W 3-CCT ceiling light \u2014 sealed, bright enough on its own, and no cut-outs over the shower. Every bathroom also needs an exhaust: take the version with the light in it and that is the room done.'},
-  laundry : {label:'Laundry',            short:'Laundry', cct:'4000K natural white', wet:true, dl:true, max:2, exhaust:true,
+             note:'Two lights, sealed for a wet area. Add an exhaust fan if the room needs one.'},
+  /* Laundry is lights only. */
+  laundry : {label:'Laundry',            short:'Laundry', cct:'4000K natural white', wet:true, dl:true, max:2,
              rec:'C25-CCT-PA',
-             note:'Same as a bathroom \u2014 a sealed ceiling light does more than two downlights, and it wants an exhaust.'},
+             note:'A sealed ceiling light does more here than two downlights.'},
   hallway : {label:'Hallway / entry',    short:'Hall', cct:'3000K warm white', wet:false, dl:true, hall:true,
              note:'Hallways are over-lit more than any other space. One fitting every 2\u20132.5 m down the centre line is plenty \u2014 you are walking through, not working here. Sensors are worth considering.'},
   study   : {label:'Study / home office',short:'Study', cct:'4000K natural white', wet:false, dl:true, lowGlareOnly:true,
@@ -1027,8 +1038,9 @@ function renderFixtures(){
        readable, then hold a legible floor. */
     var rPix=Math.max(7.5/S.zoom, m2px(cut/1000)/2);
     /* Star lights are pinpricks by design - a run of them drawn at downlight
-       size read as a row of downlights. 40% smaller, with a lower floor. */
-    if(isStarLight(p)) rPix=Math.max(4.5/S.zoom, rPix*0.6);
+       size read as a row of downlights. Kept small enough that a run of six
+       reads as a string of stars, not a row of downlights. */
+    if(isStarLight(p)) rPix=Math.max(3/S.zoom, rPix*0.42);
     /* A batten is a 1.2 m tube, not a 90 mm cut-out. Drawing it from the
        cut-out made it a stub on the plan and gave no sense of how much of the
        garage it actually covers. The bar symbol is 4.4r long, so work back
@@ -1094,12 +1106,21 @@ function renderFixtures(){
     var aim='';
     if(on && isWallLight(p)){
       var ah=aimHandlePt(f), aw=Math.max(1.4,2/S.zoom), ar=Math.max(5.5,7.5/S.zoom);
+      /* An arrow head, not a second dot. Two dots of the same size read as two
+         lights, and people were dragging the wrong one. The arrow says which
+         way it is pointing and that it is the thing you turn. */
+      var adx=ah.x-f.x, ady=ah.y-f.y, alen=Math.hypot(adx,ady)||1;
+      var ux=adx/alen, uy=ady/alen, pxv=-uy, pyv=ux;
+      var tipx=ah.x+ux*ar*0.9, tipy=ah.y+uy*ar*0.9;
+      var b1x=ah.x-ux*ar*0.7+pxv*ar*0.85, b1y=ah.y-uy*ar*0.7+pyv*ar*0.85;
+      var b2x=ah.x-ux*ar*0.7-pxv*ar*0.85, b2y=ah.y-uy*ar*0.7-pyv*ar*0.85;
       aim='<g class="fx-aim" data-aim="'+f.id+'">'+
-        '<line x1="'+f.x+'" y1="'+f.y+'" x2="'+ah.x.toFixed(1)+'" y2="'+ah.y.toFixed(1)+'" '+
+        '<line x1="'+f.x+'" y1="'+f.y+'" x2="'+(ah.x-ux*ar*0.6).toFixed(1)+'" y2="'+(ah.y-uy*ar*0.6).toFixed(1)+'" '+
           'stroke="#00c400" stroke-width="'+aw.toFixed(2)+'" stroke-linecap="round"/>'+
-        '<circle cx="'+ah.x.toFixed(1)+'" cy="'+ah.y.toFixed(1)+'" r="'+ar.toFixed(1)+'" '+
-          'fill="#fff" stroke="#00c400" stroke-width="'+aw.toFixed(2)+'"/>'+
-        '<circle cx="'+ah.x.toFixed(1)+'" cy="'+ah.y.toFixed(1)+'" r="'+(ar*2.2).toFixed(1)+'" fill="transparent"/>'+
+        '<polygon points="'+tipx.toFixed(1)+','+tipy.toFixed(1)+' '+
+          b1x.toFixed(1)+','+b1y.toFixed(1)+' '+b2x.toFixed(1)+','+b2y.toFixed(1)+'" '+
+          'fill="#00c400" stroke="#00c400" stroke-width="'+aw.toFixed(2)+'" stroke-linejoin="round"/>'+
+        '<circle cx="'+ah.x.toFixed(1)+'" cy="'+ah.y.toFixed(1)+'" r="'+(ar*2.4).toFixed(1)+'" fill="transparent"/>'+
       '</g>';
     }
     marks+='<g class="fx'+(on?' sel':'')+'" data-id="'+f.id+'">'+aim+
@@ -1490,8 +1511,12 @@ function exhaustForRoom(areaM2,withLight){
    version with the light in it. */
 function exhaustMode(r){
   var v=S.roomExhaust[r&&r.id];
-  if(v===true) return 'light';
-  return (v==='light'||v==='plain') ? v : null;
+  /* 'light' (and the older `true`) was the exhaust-with-a-light-in-it option,
+     which is not offered any more: it replaced the room's downlights. A plan
+     saved with it still opens - it just reads as a plain exhaust now, so the
+     room keeps its lights. */
+  if(v===true||v==='light'||v==='plain') return 'plain';
+  return null;
 }
 /* "Amari 52\" Fan Black or White 4-Blade with CCT Light" is the catalogue
    name. In a dropdown you only want the part that tells them apart. */
@@ -1551,7 +1576,13 @@ function recommendForRoom(r){
   var klass=isDl?fittingClass(p):null;
   /* Some room types are capped no matter what the table says - a WC does not
      need four downlights just because it measures 2.4 x 2.6 m. */
-  var cap=function(n){ return (brief.max && n>brief.max) ? brief.max : n; };
+  /* min and max both pin the count. A bathroom is two lights, always - not
+     one because the room measured small. */
+  var cap=function(n){
+    if(brief.max && n>brief.max) n=brief.max;
+    if(brief.min && n<brief.min) n=brief.min;
+    return n;
+  };
   var std=cap(countForRoom(w,h,'std')), lg=cap(countForRoom(w,h,'lg'));
   var n=klass?cap(countForRoom(w,h,klass)):null;
 
@@ -1880,6 +1911,14 @@ function renderDoneRooms(){
         'title="Show this room on the plan">'+
         '<span class="tick">\u2713</span><b>'+esc(roomName(r))+'</b>'+
         '<span class="q">'+q+'\u00d7</span></button>'+
+      '<button type="button" class="donep-x" data-donedel="'+r.id+'" '+
+        'title="Remove this room" aria-label="Remove '+esc(roomName(r))+'">\u00d7</button>'+
+      /* Change what the room IS without drawing the box again - the thing
+         people were doing by deleting the room and starting over. */
+      '<select class="donep-type" data-donetype="'+r.id+'" aria-label="What '+esc(roomName(r))+' is">'+
+        Object.keys(ROOMS).map(function(k){
+          return '<option value="'+k+'"'+(k===r.type?' selected':'')+'>'+esc(ROOMS[k].label)+'</option>';
+        }).join('')+'</select>'+
       (fanOnly
         ? '<div class="q" style="font-size:10.5px;color:#6b6e5f">Fan light \u2014 no downlights</div>'
         : '<select data-donelight="'+r.id+'" aria-label="Light in '+esc(roomName(r))+'">'+opts+'</select>')+
@@ -1903,6 +1942,19 @@ function renderDoneRooms(){
       if(card&&card.scrollIntoView) card.scrollIntoView({block:'nearest'});
       toast(roomName(r)+' \u2014 '+S.sel.length+' fitting'+(S.sel.length===1?'':'s')+' selected');
     };
+  });
+  body.querySelectorAll('[data-donetype]').forEach(function(sel){
+    sel.onchange=function(){
+      var r=S.rooms.filter(function(x){return x.id===sel.dataset.donetype;})[0];
+      if(!r||!ROOMS[sel.value]) return;
+      snapshot();
+      var relit=setRoomType(r,sel.value);
+      renderAll();
+      toast(roomName(r)+' \u2014 '+ROOMS[r.type].label.toLowerCase()+(relit?', lights updated':''));
+    };
+  });
+  body.querySelectorAll('[data-donedel]').forEach(function(b){
+    b.onclick=function(){ removeRoom(b.dataset.donedel); };
   });
   /* Changing the light here does exactly what changing it on the room card
      does - one code path, so the two can never disagree. */
@@ -1951,7 +2003,7 @@ function focusRoom(id){
 }
 function renderRoomChips(){
   var w=document.getElementById('roomchips');
-  if(!w) return;
+  if(!w) return;   /* the chip row was a third copy of the room list; it is gone */
   if(!S.rooms.length){ w.hidden=true; w.innerHTML=''; return; }
   w.hidden=false;
   w.innerHTML=S.rooms.map(function(r){
@@ -1966,6 +2018,58 @@ function renderRoomChips(){
   });
 }
 
+/* Changing what a room IS, and deleting one, are both reachable from two
+   places now - the room card and the finished list - so they live here once.
+   Doing it twice is how the two lists drifted apart. */
+function setRoomType(r,type){
+  if(!r||!ROOMS[type]) return;
+  r.type=type;
+  /* Options belong to the room type - a kitchen has no exhaust box, so
+     drop any flags the new type doesn't offer. */
+  var nb=ROOMS[r.type]||ROOMS.other;
+  if(!nb.fan){ delete S.roomFan[r.id]; delete S.roomFanSize[r.id]; delete S.roomFanManual[r.id]; delete S.roomAskFan[r.id]; }
+  else if(S.roomFan[r.id]==null) S.roomAskFan[r.id]=true;
+  if(!nb.exhaust) delete S.roomExhaust[r.id];
+  /* The comfort answer belongs to the room at the size it is. Changing
+     what the room IS does not change its size, so the answer is kept -
+     but a type that no longer asks the question drops it. */
+  if(!isBigRoom(r)) delete S.roomComfort[r.id];
+  /* A garage's batten is not the right light for a bedroom, and the other
+     way round, so the room goes back to the default when its type changes. */
+  delete S.roomPid[r.id];
+  /* A room's lights ARE its type. Switching dining to bathroom has to put
+     bathroom lighting in that box then and there. */
+  var had=roomFittings(r), relit=false;
+  if(had){
+    if(S.roomAskFan[r.id]){
+      S.fixtures=S.fixtures.filter(function(f){return !(isRoomLight(f)&&pointInRect(f.x,f.y,r));});
+      S.sel=[];
+    } else if(S.mpp){ doFill(r); relit=true; }
+  }
+  S.hiRoom=r.id;
+  if(S.roomAskFan[r.id]) S.roomOpen[r.id]=true;   // it has a question to answer
+  else delete S.roomOpen[r.id];                   // otherwise let it settle where it belongs
+  flashRoom(r.id);
+  return relit;
+}
+function removeRoom(id){
+  snapshot();
+  /* Take the room's fittings with it. Anything sitting inside the box is
+     there because of this room, so leaving them behind left lights on the
+     plan and on the invoice for a room that no longer exists. */
+  var gone=S.rooms.filter(function(r){return r.id===id;})[0];
+  if(gone){
+    S.fixtures=S.fixtures.filter(function(f){return !pointInRect(f.x,f.y,gone);});
+    S.sel=[];
+    if(S.hiRoom===gone.id) S.hiRoom=null;
+  }
+  S.rooms=S.rooms.filter(function(r){return r.id!==id;});
+  delete S.roomOpen[id]; delete S.roomFan[id]; delete S.roomFanSize[id];
+  delete S.roomFanManual[id]; delete S.roomExhaust[id]; delete S.roomComfort[id];
+  delete S.roomAskFan[id]; delete S.roomPid[id];
+  renderAll();
+}
+
 function renderRoomList(){
   renderRoomChips();
   var w=$('#roomlist');
@@ -1974,7 +2078,14 @@ function renderRoomList(){
     return;
   }
   var html='';
-  S.rooms.forEach(function(r){
+  /* Once a room is done it lives in the finished list below, not here. Keeping
+     a collapsed card AND a finished row for the same room was the same
+     information twice, which is what made a five-room plan hard to follow. */
+  var working=S.rooms.filter(function(r){ return !roomIsDone(r) || roomIsOpen(r); });
+  if(!working.length){
+    w.innerHTML='';
+  } else {
+  working.forEach(function(r){
     var brief=ROOMS[r.type]||ROOMS.other;
     var a=roomAreaM2(r);
     var rec=recommendForRoom(r);
@@ -2083,12 +2194,17 @@ function renderRoomList(){
                  ' data-roomexhaust="'+r.id+'"'+((mode||'')===val?' checked':'')+'>'+
                  '<span><b>'+title+'</b><em>'+sub+'</em></span></label>';
         }
-        return '<div class="rsub">Exhaust fan &mdash; every wet room needs one</div>'+
-          opt('','No exhaust fan','Just the lights in this room.')+
-          opt('light','Exhaust fan with a light in it',
-              (exL?esc(exL.name):'Exhaust + light')+' \u2014 that is the whole room done, no downlights needed.')+
-          opt('plain','Exhaust fan, and downlights for the light',
-              (exP?esc(exP.name):'Exhaust only')+' \u2014 a plain extractor, and the room is lit by its own downlights.');
+        /* One tick box. The old three-way question - none / with a light /
+           without - put a lighting decision inside a ventilation one, and the
+           "exhaust with a light in it" option quietly took the room's
+           downlights away. The room gets its lights either way now. */
+        return '<div class="rsub">Exhaust fan</div>'+
+          '<label class="ropt ropt-tick'+(mode==='plain'?' on':'')+'">'+
+            '<input type="checkbox" data-roomexhaust="'+r.id+'" value="plain"'+
+            (mode==='plain'?' checked':'')+'>'+
+            '<span><b>Add an exhaust fan</b><em>'+
+            (exP?esc(exP.name):'A plain extractor')+
+            ' \u2014 on top of the lights, not instead of them.</em></span></label>';
       })()+
       (function(){
         /* Change the fitting from inside the room card, rather than scrolling
@@ -2199,6 +2315,7 @@ function renderRoomList(){
       '</div></div>';
   });
   w.innerHTML=html;
+  }
   w.querySelectorAll('[data-toggle]').forEach(function(b){
     b.onclick=function(){
       var id=b.dataset.toggle;
@@ -2217,62 +2334,14 @@ function renderRoomList(){
     sel.onchange=function(){
       var r=S.rooms.filter(function(x){return x.id===sel.dataset.roomtype;})[0];
       if(!r) return;
-      snapshot(); r.type=sel.value;
-      /* Options belong to the room type - a kitchen has no exhaust box, so
-         drop any flags the new type doesn't offer. */
-      var nb=ROOMS[r.type]||ROOMS.other;
-      if(!nb.fan){ delete S.roomFan[r.id]; delete S.roomFanSize[r.id]; delete S.roomFanManual[r.id]; delete S.roomAskFan[r.id]; }
-      else if(S.roomFan[r.id]==null) S.roomAskFan[r.id]=true;
-      if(!nb.exhaust) delete S.roomExhaust[r.id];
-      /* The comfort answer belongs to the room at the size it is. Changing
-         what the room IS does not change its size, so the answer is kept -
-         but a type that no longer asks the question drops it. */
-      if(!isBigRoom(r)) delete S.roomComfort[r.id];
-      /* A garage's batten is not the right light for a bedroom, and the other
-         way round, so the room goes back to the default when its type
-         changes. */
-      delete S.roomPid[r.id];
-      /* A room's lights ARE its type. Switching dining to bathroom has to put
-         bathroom lighting in that box then and there - leaving the old set
-         sitting there meant the plan said one thing and the label another. */
-      var had=roomFittings(r), relit=false;
-      if(had){
-        if(S.roomAskFan[r.id]){
-          /* This type asks about a fan before it can be laid out, so the old
-             lights come out now rather than sitting there looking answered. */
-          S.fixtures=S.fixtures.filter(function(f){return !(isRoomLight(f)&&pointInRect(f.x,f.y,r));});
-          S.sel=[];
-        } else if(S.mpp){ doFill(r); relit=true; }
-      }
-      S.hiRoom=r.id;
-      S.roomOpen[r.id]=true;                 // keep it open so they can see the change
+      snapshot();
+      var relit=setRoomType(r,sel.value);
       renderAll();
-      flashRoom(r.id);
-      toast('Changed to '+(ROOMS[r.type]||ROOMS.other).label+
-            (relit?' \u2014 lights updated':''));
+      toast('Changed to '+(ROOMS[r.type]||ROOMS.other).label+(relit?' \u2014 lights updated':''));
     };
   });
   w.querySelectorAll('[data-delroom]').forEach(function(b){
-    b.onclick=function(){snapshot();
-      /* Take the room's fittings with it. Anything sitting inside the box is
-         there because of this room, so leaving them behind left lights on the
-         plan and on the invoice for a room that no longer exists. */
-      var gone=S.rooms.filter(function(r){return r.id===b.dataset.delroom;})[0];
-      if(gone){
-        S.fixtures=S.fixtures.filter(function(f){return !pointInRect(f.x,f.y,gone);});
-        S.sel=[];
-        if(S.hiRoom===gone.id) S.hiRoom=null;
-      }
-      S.rooms=S.rooms.filter(function(r){return r.id!==b.dataset.delroom;});
-      delete S.roomOpen[b.dataset.delroom];
-      delete S.roomFan[b.dataset.delroom];
-      delete S.roomFanSize[b.dataset.delroom];
-      delete S.roomFanManual[b.dataset.delroom];
-      delete S.roomExhaust[b.dataset.delroom];
-      delete S.roomComfort[b.dataset.delroom];
-      delete S.roomAskFan[b.dataset.delroom];
-      delete S.roomPid[b.dataset.delroom];
-      renderAll();};
+    b.onclick=function(){ removeRoom(b.dataset.delroom); };
   });
   w.querySelectorAll('[data-userec]').forEach(function(b){
     b.onclick=function(){
@@ -2395,8 +2464,8 @@ function renderRoomList(){
     cb.onchange=function(){
       var r=S.rooms.filter(function(x){return x.id===cb.dataset.roomexhaust;})[0];
       if(!r) return;
-      var v=cb.value||'';
-      if(v) S.roomExhaust[r.id]=v; else delete S.roomExhaust[r.id];
+      /* A tick box now: on means a plain extractor goes in beside the lights. */
+      if(cb.checked) S.roomExhaust[r.id]='plain'; else delete S.roomExhaust[r.id];
       S.roomOpen[r.id]=true;
       if(S.mpp) doFill(r); else renderRoomList();
       renderAll();
@@ -2481,7 +2550,9 @@ function groupPointsAt(x,y){
   var p=byId(S.pick.pid); if(!p) return [];
   var sp=isStarLight(p) ? m2px(STAR_SPACING_M)
                         : m2px(spacingFor(S.ceiling,parseBeam(p.beam)));
-  var pts=(S.pick.arr==='grid'?gridPoints(S.pick.qty,sp):rowPoints(S.pick.qty,sp));
+  var pts=(S.pick.arr==='col'?colPoints(S.pick.qty,sp)
+          :S.pick.arr==='grid'?gridPoints(S.pick.qty,sp)   /* older saved plans */
+          :rowPoints(S.pick.qty,sp));
   return pts.map(function(q){return {x:x+q.x,y:y+q.y};});
 }
 function drawGhost(pts,snap){
@@ -2515,10 +2586,10 @@ function snapTol(){ return 9/S.zoom; }
 var SPECIAL={
   star:{
     label:'Star lights', icon:'✦', pid:'DL03-ALL-1',
-    blurb:'Tiny 30 mm points of light set into the ceiling — the look of a starlit sky. Each one is only 3 W, so they are an effect, not the light for the room.',
-    steps:['Choose how many you want.',
-           'Choose how they should sit.',
-           'Click the plan where you want them.'],
+    blurb:'Tiny 30 mm points in the ceiling — a starlit sky. 3 W each, so they are an effect, not the room\'s light.',
+    steps:['How many.',
+           'Which way they run.',
+           'Click the plan — they all go down together and move as one.'],
     counts:[1,2,3,4,5,6],
     note:'They will not light a room on their own — keep the normal downlights as well.'
   },
@@ -2531,8 +2602,7 @@ var SPECIAL={
     blurb:'For outside walls \u2014 entries, the alfresco, along a path. They bolt to the wall and throw light out in front of them, about 180\u00b0, and nothing behind. Drop one and it points away from the nearest wall on its own.',
     steps:['Pick which one.',
            'Click the plan against the outside wall you want it on.',
-           'It faces away from that wall on its own. To aim it somewhere else, click it and drag the green dot in front of it \u2014 or use the Turn buttons.',
-           'Drag the light itself to move it. It keeps the aim you gave it.'],
+           'Drag the green arrow to turn it. Drag the light itself to move it.'],
     /* The budget wall light (W10-CCT-BW) is no longer offered - Lazar:
        "BUDGET OUTDOOR LIGHT NEEDS TO BE REMOVED". It is deliberately still in
        WALL_KEEP, so a plan saved before today still resolves and prices it;
@@ -2600,8 +2670,8 @@ function renderSpecial(){
       s.counts.map(function(n){
         return '<button type="button" class="numbtn'+(S.pick.qty===n?' on':'')+'" data-specn="'+n+'">'+n+'</button>';
       }).join('')+'</div>'+
-      '<div class="lbl">How should they sit?</div><div class="howrow">'+
-      [['one','One at a time'],['row','In a row'],['grid','In a block']].map(function(a){
+      '<div class="lbl">Which way do they run?</div><div class="howrow">'+
+      [['row','Across \u2192'],['col','Up and down \u2193']].map(function(a){
         return '<button type="button" class="howbtn'+(specArr===a[0]?' on':'')+'" data-specarr="'+a[0]+'">'+a[1]+'</button>';
       }).join('')+'</div>';
   }
@@ -2656,28 +2726,21 @@ function applySpecial(){
   }else{
     if(!s.choices || !s.choices.some(function(c){return c.id===S.pick.pid;})) S.pick.pid=s.pid;
     if(s.counts){
-      if(specArr==='one'){ S.pick.arr='row'; }
-      else S.pick.arr=specArr;
+      S.pick.arr=(specArr==='col')?'col':'row';
     }else{ S.pick.qty=1; S.pick.arr='row'; }
   }
   S.pick.cat=(byId(S.pick.pid)||{}).cat||S.pick.cat;
-  var stepsList=s.steps.slice();
-  if(s.counts&&specArr==='one') stepsList[2]='Click the plan once for each one — you asked for '+S.pick.qty+'.';
-  showHowTo(s.label, s.blurb, stepsList);
+  showHowTo(s.label, s.blurb, s.steps.slice());
   setTool('place');
   if(typeof renderTools==='function') renderTools();
 }
 
 function placeGroupAt(x,y){
   var p=byId(S.pick.pid); if(!p) return;
-  /* "One at a time" means one per click, however many they asked for. */
-  if(specPick&&SPECIAL[specPick]&&SPECIAL[specPick].counts&&specArr==='one'){
-    addFixtures([{x:x,y:y}]);
-    var have=S.fixtures.filter(function(f){return f.pid===p.id;}).length;
-    toast(niceName(p)+' \u00b7 '+have+' of '+S.pick.qty+' placed');
-    return;
-  }
-  addFixtures(groupPointsAt(x,y));
+  /* They all land in one go and they stay together. Star lights especially -
+     dropping six of them one click at a time, then trying to keep them evenly
+     spaced by hand, was the job nobody could finish. */
+  addFixtures(groupPointsAt(x,y));   /* star runs group themselves in addFixtures */
   toast(S.pick.qty+' × '+niceName(p)+' placed');
 }
 /* pickDefaultDownlight and relayRoomsForPick are gone. Both existed because
@@ -2754,43 +2817,17 @@ function doFillInner(r){
     }
   }
 
-  /* A wet room nobody has answered the exhaust question for yet. It still must
-     not be lit with open downlights, so the sealed ceiling light goes in now
-     and the card's exhaust choice is what is left to do. */
-  if(brief.exhaust && exhaustMode(r)==null){
-    var lamp0=byId(brief.rec);
-    if(lamp0){
-      snapshot();
-      S.fixtures=S.fixtures.filter(function(f){ return !(isRoomLight(f)&&pointInRect(f.x,f.y,r)); });
-      placeAs(lamp0.id,[{x:r.x+r.w*0.5, y:r.y+r.h*0.45}]);
-      S.roomOpen[r.id]=true;
-      toast(brief.label+': sealed ceiling light in \u2014 now pick the exhaust on the room card');
-      return;
-    }
-  }
-
-  /* Bathrooms and laundries get the sealed ceiling light plus an exhaust,
-     which is the whole plan for that room. */
-  if(brief.exhaust && exhaustMode(r)==='light'){
-    var ex=exhaustForRoom(area), lamp=byId(brief.rec);
-    snapshot();
-    S.fixtures=S.fixtures.filter(function(f){ return !(isRoomLight(f)&&pointInRect(f.x,f.y,r)); });
-    var placed=[];
-    if(lamp){ placeAs(lamp.id,[{x:r.x+r.w*0.5, y:r.y+r.h*0.36}]); placed.push(lamp.id); }
-    if(ex){   placeAs(ex.id,  [{x:r.x+r.w*0.5, y:r.y+r.h*0.72}]); placed.push(ex.id); }
-    toast(brief.label+': '+placed.join(' + '));
-    return;
-  }
-
-  /* Exhaust with NO light in it: the extractor goes in and the room is lit by
-     its own downlights, the same count any room this size would get. */
+  /* A wet room is lit like any other room. If the exhaust box is ticked, the
+     extractor goes in as well - on top of the lights, never instead of them.
+     The old "exhaust with a light in it" option took the downlights away,
+     which is why a bathroom kept ending up with no light in it. */
   if(brief.exhaust && exhaustMode(r)==='plain'){
     var exP=exhaustForRoom(area,false);
     snapshot();
     S.fixtures=S.fixtures.filter(function(f){ return !(isRoomLight(f)&&pointInRect(f.x,f.y,r)); });
     if(exP) placeAs(exP.id,[{x:r.x+r.w*0.5, y:r.y+r.h*0.85}]);
     var recP=recommendForRoom(r);
-    var ptsP=(recP&&recP.n)? gridInRoom(w,h,recP.n,off) : fillPoints(w,h,sp,off);
+    var ptsP=(recP&&recP.n)? gridInRoom(w,h,recP.n,off,!!brief.min) : fillPoints(w,h,sp,off);
     placeAs(p.id, ptsP.map(function(q){return {x:r.x+m2px(q.x), y:r.y+m2px(q.y)};}));
     toast(brief.label+': exhaust fan + '+ptsP.length+' \u00d7 '+niceName(p));
     return;
@@ -2815,7 +2852,7 @@ function doFillInner(r){
     }
     why=nHall+' down the centre line, one every '+(along/nHall).toFixed(1)+' m';
   }else if(rec&&rec.n){
-    pts=gridInRoom(w,h,rec.n,off);
+    pts=gridInRoom(w,h,rec.n,off,!!brief.min);
     why=rec.n+' '+(rec.klass==='lg'?'low glare':'standard')+' downlights for a '+rec.bandLabel+' room';
   }else if(p.cat==='ceiling'){
     /* A 24-25 W surface ceiling light does a whole small room on its own.
@@ -2966,7 +3003,6 @@ function armCalHandles(){
   if(!S.cal.a||!S.cal.b){ var d=defaultCalPoints(); S.cal.a=d.a; S.cal.b=d.b; }
   S.cal.px=Math.hypot(S.cal.b.x-S.cal.a.x,S.cal.b.y-S.cal.a.y);
   renderCalHandles();
-  $('#callen').disabled=false;$('#calunit').disabled=false;$('#btn-calapply').disabled=false;
 }
 function updateCalFromHandles(commit){
   if(!S.cal.a||!S.cal.b) return;
@@ -2982,9 +3018,13 @@ function onDown(e){
   var pt=toImg(e);
   if(S.tool==='pan'){drag={mode:'pan',sx:e.clientX,sy:e.clientY,px:S.panX,py:S.panY};el.canvas.classList.add('panning');return;}
   if(S.tool==='scale'){
+    /* Only the two red points move. Clicking anywhere else on the plan used to
+       start a brand new line from that spot, which is why the points kept
+       jumping somewhere unexpected the moment you touched the drawing. */
     var ch=calHandleAt(pt);
     if(ch){drag={mode:'calpt',which:ch};return;}
-    drag={mode:'cal',a:pt,b:pt};guideLine(pt,pt);return;}
+    drag={mode:'pan',sx:e.clientX,sy:e.clientY,px:S.panX,py:S.panY};
+    el.canvas.classList.add('panning');return;}
   if(S.tool==='measure'){drag={mode:'tape',a:pt,b:pt};guideLine(pt,pt);return;}
   if(S.tool==='room'){drag={mode:'room',a:pt,b:pt};guideRect(pt,pt);return;}
   if(S.tool==='place'){
@@ -3121,7 +3161,7 @@ function onUp(e){
     if(len<8){guideClear();toast('Drag a bit further — that line is too short to be accurate');return;}
     S.cal={a:d.a,b:d.b,px:len};
     renderCalHandles();   /* the ends of a traced line are draggable too */
-    $('#callen').disabled=false;$('#calunit').disabled=false;$('#btn-calapply').disabled=false;
+    $('#btn-calapply').disabled=false;
     var L=calRefLength();
     if(L===undefined){ toast('Pick what you are measuring first'); $('#calref').focus(); return; }
     if(L!=null){ applyScale(); return; }
@@ -3278,7 +3318,16 @@ function loadImageSrc(src,name,openTo,knownMpp){
     S.mpp=knownMpp||null;S.cal={a:null,b:null};
     renderAll();fitView();
     openStep(openTo||2);
-    if(!openTo) toast('Plan loaded — now set the scale');
+    if(!openTo){
+      /* The scale is the first thing to do, so it starts itself: step 02 opens
+         with the two red points already sitting on the plan, ready to be
+         dragged onto a door. Nothing is measured off that default silently -
+         the points are visible and the instruction is on screen. */
+      var ref=document.getElementById('calref');
+      if(ref && !ref.value){ ref.value='0.82'; ref.dispatchEvent(new Event('change')); }
+      setTool('scale');
+      toast('Drag the 2 red points across a door on your plan');
+    }
     else if(knownMpp) toast('Sample plan loaded, already to scale — box in a room to light it');
   };
   img.onerror=function(){toast('That image would not load');};
@@ -3808,7 +3857,7 @@ function renderPlaceTeach(){
   var pool=poolDiameter(S.ceiling,beam);
   var h='<h5>What happens when you click</h5>';
   h+='Drops <b>'+S.pick.qty+'</b> × '+esc(p.id)+' as a '+
-     ({row:'row',grid:'grid',line:'line you drag',fill:'room fill'}[S.pick.arr]||'row')+
+     ({row:'across',col:'up and down',grid:'block',line:'line you drag',fill:'room fill'}[S.pick.arr]||'across')+
      '. These are extras \u2014 they go on the plan and on your list, and they do not '+
      'change what is lighting a room.';
   if(p.cat==='downlights'){
@@ -3826,11 +3875,13 @@ function renderPlaceTeach(){
   t.innerHTML=h;
 }
 
+/* The "what this room gets" panel is gone - it explained a choice the app
+   makes for you, above the button you actually came to press. */
 function renderRoomTeach(){
+  var t=document.getElementById('teach-room'); if(!t) return;
   var b=ROOMS[S.roomType]||ROOMS.other;
-  $('#teach-room').innerHTML='<h5>'+esc(b.label)+'</h5>'+
-    (b.dl?'Downlights, usually <b>'+esc(b.cct)+'</b>. ':'Usually <b>'+esc(b.cct)+'</b>. ')+esc(b.note)+
-    (b.wet?'<br><br><b>Wet area.</b> Check the IP rating of anything you place here.':'');
+  t.innerHTML='<h5>'+esc(b.label)+'</h5>'+
+    (b.dl?'Downlights, usually <b>'+esc(b.cct)+'</b>. ':'Usually <b>'+esc(b.cct)+'</b>. ')+esc(b.note);
 }
 
 /* Three answers, and they are not the same thing:
@@ -3840,6 +3891,21 @@ function renderRoomTeach(){
    Everything downstream reads a guessed scale as a real one, which is how a
    plan ends up costed off a door that was never measured. */
 function calRefChosen(){ return !!$('#calref').value; }
+/* People type 3,6 as often as 3.6 - a comma is the decimal point in half the
+   world and on most phone keypads. Take either, and ignore spaces. */
+function calNum(v){
+  if(v==null) return NaN;
+  return parseFloat(String(v).replace(/\s+/g,'').replace(',','.'));
+}
+/* The custom length is asked BEFORE the points go on the plan, so this says
+   whether we have everything we need to arm the two red points. */
+function calReady(){
+  var L=calRefLength();
+  if(L===undefined) return false;
+  if(L!==null) return true;
+  var v=calNum($('#callen').value);
+  return !!(v&&v>0);
+}
 function calRefLength(){
   var r=$('#calref').value;
   if(!r) return undefined;
@@ -3848,7 +3914,7 @@ function calRefLength(){
 function applyScale(){
   var preset=calRefLength();
   if(preset===undefined){toast('Pick what you are measuring first');$('#calref').focus();return;}
-  var v=preset!=null?preset:parseFloat($('#callen').value);
+  var v=preset!=null?preset:calNum($('#callen').value);
   var u=preset!=null?1:parseFloat($('#calunit').value);
   if(!v||v<=0){toast('Type the real length first');return;}
   if(!S.cal.px){toast('Put the 2 points on the plan first');return;}
@@ -3902,21 +3968,33 @@ function wire(){
   $('#btn-cal').onclick=function(){
     if(!S.plan.loaded){toast('Load a plan first');return;}
     if(!calRefChosen()){toast('Pick what you are measuring first');$('#calref').focus();return;}
+    if(!calReady()){toast('Type how long it really is first');$('#callen').focus();return;}
     setTool(S.tool==='scale'?'select':'scale');
   };
   $('#btn-calapply').onclick=applyScale;
-  $('#calref').onchange=function(){
-    var chosen=calRefChosen(), custom=this.value==='custom';
+  /* The length is wanted BEFORE the points go down, so the button that puts
+     them there only wakes up once we know what we are measuring AND how long
+     it is. Nothing is pre-chosen: the old default quietly scaled every plan
+     off an 820 mm door whether or not there was one on the drawing. */
+  function calSync(){
+    var custom=$('#calref').value==='custom';
     $('#calcustom').style.display=custom?'':'none';
-    /* Nothing is pre-chosen, so the button stays dead until they say what they
-       are measuring. Without this the old default quietly scaled every plan off
-       an 820 mm door whether or not there was one on the drawing. */
-    $('#btn-cal').disabled=!chosen;
-    if(chosen && !custom && S.cal.px) applyScale();
-    if(S.tool==='scale') setTool('scale');   // refresh the on-plan instruction
+    var ok=calReady();
+    $('#btn-cal').disabled=!ok;
+    $('#btn-calapply').disabled=!ok;
+    if(ok && S.cal.px) applyScale();
+    else if(S.tool==='scale') setTool('scale');   // refresh the on-plan instruction
+  }
+  $('#calref').onchange=calSync;
+  $('#callen').oninput=function(){
+    var ok=calReady();
+    $('#btn-cal').disabled=!ok; $('#btn-calapply').disabled=!ok;
   };
-  $('#calref').dispatchEvent(new Event('change'));
-  $('#callen').addEventListener('keydown',function(e){if(e.key==='Enter')applyScale();});
+  calSync();
+  $('#callen').addEventListener('keydown',function(e){
+    if(e.key!=='Enter') return;
+    if(S.cal.px) applyScale(); else $('#btn-cal').click();
+  });
   $('#ceil').onchange=function(){S.ceiling=parseFloat(this.value);renderAll();};
 
   // rooms

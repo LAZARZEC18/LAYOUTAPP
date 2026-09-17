@@ -491,11 +491,14 @@ window.__GHQA=function(){
   ok('and nothing else does',
      Object.keys(G.ROOMS).filter(function(k){return G.ROOMS[k].fan;}).sort().join(',')==='alfresco,bedroom',
      Object.keys(G.ROOMS).filter(function(k){return G.ROOMS[k].fan;}).join(','));
-  ok('a bathroom and a laundry take an exhaust',
-     G.ROOMS.bathroom.exhaust&&G.ROOMS.laundry.exhaust,'wet room without an exhaust');
-  ok('and nothing else does',
-     Object.keys(G.ROOMS).filter(function(k){return G.ROOMS[k].exhaust;}).sort().join(',')==='bathroom,laundry',
+  /* The exhaust is offered in the bathroom only, as an extra you tick. The
+     laundry is lights only. */
+  ok('a bathroom can take an exhaust',G.ROOMS.bathroom.exhaust,'bathroom without the option');
+  ok('a laundry is lights only',!G.ROOMS.laundry.exhaust,'laundry still asks about an exhaust');
+  ok('and nothing else offers one',
+     Object.keys(G.ROOMS).filter(function(k){return G.ROOMS[k].exhaust;}).sort().join(',')==='bathroom',
      Object.keys(G.ROOMS).filter(function(k){return G.ROOMS[k].exhaust;}).join(','));
+  eq('a bathroom is two lights, whatever it measures',G.ROOMS.bathroom.min,2);
   (function(){
     G.S.mpp=0.01; G.S.fixtures=[]; G.S.roomFan={}; G.S.fanPlan='ask';
     G.S.rooms=[{id:'lv',type:'living',x:0,y:0,w:400,h:400},
@@ -674,9 +677,11 @@ window.__GHQA=function(){
   ok('and the button that starts it is dead until they choose',
      d.getElementById('btn-cal').disabled,'button live with nothing chosen');
   eq('with nothing chosen there is no length to scale by',G.calRefLength(),undefined);
-  ok('there are three references plus "type it myself", not a dozen',
-     d.getElementById('calref').options.length===5,
+  ok('two references plus "type it myself", not a dozen',
+     d.getElementById('calref').options.length===4,
      d.getElementById('calref').options.length+' options');
+  ok('and the garage door is not one of them - too few plans have one',
+     !/garage/i.test(d.getElementById('calref').textContent),'garage door still offered');
   d.getElementById('calref').value='0.82';
   d.getElementById('calref').dispatchEvent(new window.Event('change'));
   eq('picking a standard door gives its real width',G.calRefLength(),0.82);
@@ -718,35 +723,26 @@ window.__GHQA=function(){
   G.doFill(room);
   ok('filling it marks it done',G.roomIsDone(room),G.roomFittings(room));
   ok('and it folds away on its own',!G.roomIsOpen(room),'stayed open');
-  eq('the finished card shows a tick',d.querySelectorAll('.rcard.done .rtick').length,1);
+  /* A finished room leaves the working list entirely and appears under
+     "Rooms finished" - one place per room, so a long plan stays readable. */
+  eq('a finished room leaves the working list',d.querySelectorAll('.rcard').length,0);
+  eq('and turns up under Rooms finished',d.querySelectorAll('.donep-row').length,1);
+  eq('with a tick beside it',d.querySelectorAll('.donep-nm .tick').length,1);
+  ok('and the count it was given',/\d/.test(d.querySelector('.donep-nm .q').textContent),
+     d.querySelector('.donep-nm .q').textContent);
   eq('the step header reports the progress',d.getElementById('st3').textContent,'1 room done');
-  ok('a folded card points its chevron down, an open one up',
-     !d.querySelector('.rcard').classList.contains('open'),'card state');
-  ok('the summary line still reports the room',
-     /m²/.test(d.querySelector('.rcard-sub').textContent)&&
-     /placed/.test(d.querySelector('.rcard-sub').textContent),
-     d.querySelector('.rcard-sub').textContent);
-  d.querySelector('[data-toggle]').click();
-  ok('clicking the header opens it again',G.roomIsOpen(room),'did not reopen');
-  ok('a room can be changed to another type after it is drawn',
+  ok('the finished row can change what the room is',
      (function(){
-       var sel=d.querySelector('[data-roomtype]');
+       var sel=d.querySelector('[data-donetype]');
        sel.value='kitchen'; sel.dispatchEvent(new window.Event('change'));
        return G.S.rooms[0].type==='kitchen';
      })(),G.S.rooms[0].type);
-  ok('and changing it re-reads the advice for the new type',
-     /island|sink/i.test(d.querySelector('.rcard .teach').textContent),
-     d.querySelector('.rcard .teach').textContent.slice(0,40));
-  (function(){var sel=d.querySelector('[data-roomtype]');sel.value='living';
+  (function(){var sel=d.querySelector('[data-donetype]');sel.value='living';
     sel.dispatchEvent(new window.Event('change'));})();
-  ok('and that choice sticks through a redraw',
-     (function(){G.renderAll();return G.roomIsOpen(room);})(),'lost the choice');
-  d.querySelector('[data-toggle]').click();
-  ok('and it can be folded back up by hand',!G.roomIsOpen(room),'did not close');
-  ok('removing a room still works from the folded card',
+  eq('and it is still one row afterwards',d.querySelectorAll('.donep-row').length,1);
+  ok('a finished room can be removed from that row',
      (function(){
-       d.querySelector('[data-toggle]').click();            /* open it */
-       d.querySelector('[data-delroom]').click();
+       d.querySelector('[data-donedel]').click();
        return G.S.rooms.length===0;
      })(),G.S.rooms.length);
   ok('removing a room takes its fittings with it',
@@ -756,7 +752,8 @@ window.__GHQA=function(){
        G.doFill(G.S.rooms[0]);
        if(!G.S.fixtures.length) return false;   /* nothing placed - test is void */
        G.renderAll();
-       d.querySelector('[data-delroom]').click();
+       var x=d.querySelector('[data-delroom]')||d.querySelector('[data-donedel]');
+       x.click();
        return G.S.rooms.length===0 && G.S.fixtures.length===0;
      })(),'left '+G.S.fixtures.length+' fittings behind');
   ok('a part-filled room stays open',
