@@ -146,35 +146,35 @@ export default function LayoutPlanner() {
               <p className="step-lead">Tell it what you are going to measure, then put 2 points across that thing on the plan. That is the scale set — everything else sizes itself from there.</p>
               <div id="paperbox" />
               <div className="q">
-                <label className="qlabel" htmlFor="calref">What are you going to measure?</label>
-                <div className="hint" style={{margin:'0 0 8px'}}>Pick something on your plan you already know the real size of. Everything the planner counts, spaces and prices comes off this one measurement.</div>
+                <label className="qlabel" htmlFor="calref">What are you measuring?</label>
                 <div className="selwrap">
                   <select className="sel" id="calref" defaultValue=''>
                     <option value="" disabled>Choose one…</option>
                     <option value="0.82">A standard internal door — 820 mm</option>
-                    <option value="2.4">A single garage door — 2400 mm</option>
                     <option value="0.9">A kitchen bench, front to back — 900 mm</option>
-                    <option value="custom">Something else — I'll type the real length</option>
+                    <option value="custom">Something else — I'll type the length</option>
                   </select>
                 </div>
+                <div id="calcustom" style={{display:'none'}}>
+                  <label className="qlabel" htmlFor="callen" style={{marginTop:'10px'}}>How long is it really?</label>
+                  <div className="row2">
+                    <input className="txt" id="callen" type="text" inputMode="decimal" placeholder="e.g. 3.6 or 3,6" />
+                    <div className="selwrap">
+                      <select className="sel" id="calunit">
+                        <option value="1">metres</option>
+                        <option value="0.001">millimetres</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+                <div className="hint" style={{margin:'9px 0 0'}}>The longer the thing you measure, the more accurate the whole plan.</div>
                 <button type="button" className="act pri" id="btn-cal" style={{marginTop:'9px'}} disabled>
                   <svg viewBox="0 0 24 24">
                     <path d="M3 12h18M6 9v6M18 9v6" />
                   </svg>
                   Put 2 points on the plan
                 </button>
-                <div id="calcustom" style={{display:'none'}}>
-                  <div className="row2" style={{marginTop:'8px'}}>
-                    <input className="txt" id="callen" type="number" min="0.05" step="0.01" placeholder="e.g. 3.6" disabled />
-                    <div className="selwrap">
-                      <select className="sel" id="calunit" disabled>
-                        <option value="1">metres</option>
-                        <option value="0.001">millimetres</option>
-                      </select>
-                    </div>
-                  </div>
-                  <button type="button" className="act go sm" id="btn-calapply" style={{marginTop:'8px'}} disabled>Apply scale</button>
-                </div>
+                <button type="button" className="act go sm" id="btn-calapply" style={{marginTop:'8px',display:'none'}} disabled>Apply scale</button>
               </div>
               <div className="q" id="scalebox" />
               <div className="q">
@@ -212,10 +212,6 @@ export default function LayoutPlanner() {
                 <div className="selwrap">
                   <select className="sel" id="rtype" />
                 </div>
-                <details className="whyd">
-                  <summary>What this room gets</summary>
-                  <div className="teach" id="teach-room" />
-                </details>
               </div>
               <button type="button" className="act pri" id="btn-room">
                 <svg viewBox="0 0 24 24">
@@ -223,7 +219,6 @@ export default function LayoutPlanner() {
                 </svg>
                 Drag a box around the room
               </button>
-              <div id="roomchips" className="rchips" hidden aria-label="Rooms on this plan" />
               <div id="roomlist" style={{marginTop:'14px'}} />
               <aside className="donep" id="donep" hidden aria-label="Rooms finished">
                 <button type="button" className="donep-h" id="donep-h">
@@ -244,23 +239,12 @@ export default function LayoutPlanner() {
               <i className="chev" />
             </button>
             <div className="step-body">
-              <p className="step-lead">
-                <b>You can skip this.</b>
-                {' '}Your rooms are lit already. This is only for extras you want on top — star lights in the alfresco ceiling, an outdoor wall light beside the front door, a pendant over the island bench.
-              </p>
-              <p className="step-lead" style={{marginTop:'-4px'}}>
-                Nothing you choose here changes a room. To change the light{' '}
-                <em>in</em>
-                {' '}a room, use{' '}
-                <b>Change type of light</b>
-                {' '}on that room in step 03.
-              </p>
+              <p className="step-lead">Optional. Your rooms are already lit — this is for extras on top.</p>
               <div className="scalewarn" data-scalewarn="" hidden />
               <div className="q">
-                <div className="rsub" style={{marginTop:'0'}}>Special lights — pick one, then click the plan</div>
                 <div className="specrow" id="specrow" />
                 <div id="specpanel" />
-                <div className="rsub">Or choose anything from the catalogue</div>
+                <div className="rsub">Or anything from the catalogue</div>
                 <label className="qlabel" htmlFor="cat">1 · What kind of light?</label>
                 <div className="selwrap">
                   <select className="sel" id="cat" />
@@ -279,11 +263,11 @@ export default function LayoutPlanner() {
                 <div className="chips" id="qtychips" />
               </div>
               <div className="q" id="arrq">
-                <label className="qlabel" htmlFor="arr">4 · How should they sit?</label>
+                <label className="qlabel" htmlFor="arr">4 · Which way do they run?</label>
                 <div className="selwrap">
                   <select className="sel" id="arr">
-                    <option value="row">In a row</option>
-                    <option value="grid">In a square block</option>
+                    <option value="row">Across →</option>
+                    <option value="col">Up and down ↓</option>
                     <option value="line">Along a line I drag</option>
                   </select>
                 </div>
@@ -295,7 +279,7 @@ export default function LayoutPlanner() {
                 </svg>
                 <span id="placelabel">Put them on the plan</span>
               </button>
-              <p className="step-lead" style={{marginTop:'8px'}}>Press the green button, then click the spot on your plan. Click again for another one.</p>
+              <p className="step-lead" style={{marginTop:'8px'}}>Press the green button, then click the plan.</p>
               <details className="moreinfo" id="place-more">
                 <summary>More information</summary>
                 <div className="moreinfo-body">
@@ -450,6 +434,7 @@ export default function LayoutPlanner() {
               <h5 id="howto-t" />
               <p id="howto-b" />
               <ol id="howto-l" />
+              <button type="button" className="act go sm howto-done" id="howto-done">Done</button>
             </aside>
             <div className="planhint" id="planhint" hidden>
               <div className="planhint-card">
@@ -584,8 +569,8 @@ export default function LayoutPlanner() {
               </div>
             </div>
             <figure className="home-fig">
-              <img id="img-hero" alt="Living room lit with an even grid of recessed downlights" />
-              <figcaption>Downlights on an even grid — what the planner lays out for you.</figcaption>
+              <img id="img-hero" alt="Open dining and family room lit by six downlights on an even grid" />
+              <figcaption>Six downlights on an even grid — what the planner lays out for you.</figcaption>
             </figure>
           </div>
           <div className="home-how">
