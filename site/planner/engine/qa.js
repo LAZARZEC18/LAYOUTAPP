@@ -323,25 +323,29 @@ window.__GHQA=function(){
      !!G.byId('ST24V-SMD-ALL-1'),'strip product dropped from the catalogue');
   eq('the T40 Pro is the only batten',G.catProducts('batten').length,1);
   eq('and it is the T40 Pro',G.catProducts('batten')[0].id,'T40-CCT-BATTEN-PRO');
-  ok('exhaust fans and bathroom mates are recognised as bathroom fittings',
-     G.catProducts('fans').filter(G.isBathroomFitting).length>=4,'none flagged');
+  ok('exhaust fans and bathroom mates are still recognised as bathroom fittings',
+     ['BLIZZARD-EXHAUST-C','BLIZZARD-EXHAUST-S','BLIZZARD-EXHAUST-L']
+       .every(function(id){return G.isBathroomFitting(G.byId(id));}),'none flagged');
   ok('a ceiling fan is not treated as a bathroom fitting',
      !G.isBathroomFitting(G.byId('AMARI-DC-52-FAN-LI')),'ceiling fan flagged');
-  ok('bathroom fittings stay out of the fan list in a dry room',
+  /* The extras picker offers ceiling fans and nothing else. An exhaust is a
+     ventilation decision made on the room card, sized to the room - it is not
+     something you drop on a plan by hand, and having both kinds in one list
+     meant a bathroom could end up with two of them. */
+  ok('the fan list is ceiling fans only, whatever the room type',
      (function(){
-       G.S.roomType='living'; G.setPick({cat:'fans'});
-       return G.visibleProducts().every(function(p){return !G.isBathroomFitting(p);});
-     })(),'exhaust offered in a lounge');
-  ok('and come back once the room is a bathroom',
+       return ['living','bathroom','laundry'].every(function(t){
+         G.S.roomType=t; G.setPick({cat:'fans'});
+         var v=G.visibleProducts();
+         return v.length>0 && v.every(G.isCeilingFanProduct);
+       });
+     })(),'an exhaust is still in the extras list');
+  ok('and the count beside it matches what the list shows',
      (function(){
        G.S.roomType='bathroom'; G.setPick({cat:'fans'});
-       return G.visibleProducts().length>0 && G.visibleProducts().every(G.isBathroomFitting);
-     })(),'the bathroom fan list is wrong');
-  ok('a ceiling fan is not offered for a bathroom either',
-     (function(){
-       G.S.roomType='bathroom'; G.setPick({cat:'fans'});
-       return G.visibleProducts().every(function(p){return !G.isCeilingFanProduct(p);});
-     })(),'ceiling fan offered in a bathroom');
+       return G.catProducts('fans').every(G.isCeilingFanProduct) &&
+              G.catProducts('fans').length===G.visibleProducts().length;
+     })(),'count and list disagree');
   G.S.roomType='kitchen';
 
   /* ---- the fan rules ---- */

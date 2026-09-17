@@ -517,7 +517,7 @@ var CATS=[
   {id:'ceiling',    label:'Ceiling & wall lights',hint:'Surface mounted. Use where you cannot recess — concrete ceilings, rentals, low voids.'},
   {id:'batten',     label:'Battens',              hint:'Linear surface fittings. Cheap even light for garages, laundries and sheds.'},
   {id:'star',       label:'Star lights',          hint:'Small 3W points. Alfresco ceilings, feature nooks, stair risers.'},
-  {id:'fans',       label:'Fans',                 hint:'One per room, centred. A fan with a light does the room on its own; a fan without one still needs four low glare downlights around it.'}
+  {id:'fans',       label:'Fans',                 hint:'Ceiling fans, one per room, centred. A fan with a light does the room on its own; a fan without one still needs four low glare downlights around it. Exhaust fans go in from the room card.'}
 ];
 
 /* The planner lays out the lighting inside a house. Track, sensors, outdoor,
@@ -638,6 +638,13 @@ function catProducts(c){
        were never the right answer for a garage or a laundry, and having three
        near-identical bars in the list only slowed the choice down. */
     if(c==='batten')     return p.id===BATTEN_ONLY;
+    /* Ceiling fans only. Exhausts, bathroom mates and heat lamps are a
+       ventilation decision, not a light you drop on a plan by hand - they go
+       in from the room card's "Add an exhaust fan" tick, sized to the room.
+       Having them in the extras list meant a bathroom's exhaust could be
+       placed twice, and put four fittings nobody wanted in front of everyone
+       looking for a ceiling fan. */
+    if(c==='fans')       return isCeilingFanProduct(p);
     return true;
   });
 }
@@ -3720,11 +3727,7 @@ function openStep(n){
    outside a wet room, so counting the whole category promised twelve fans
    and then showed four. */
 function catCount(id){
-  var list=catProducts(id);
-  if(id==='fans')
-    list=list.filter(wetRoomSelected() ? isBathroomFitting
-                                       : function(p){return !isBathroomFitting(p);});
-  return list.length;
+  return catProducts(id).length;
 }
 function refreshCatCounts(){
   var cat=document.getElementById('cat');
@@ -3774,12 +3777,6 @@ function productMatches(p,q){
 }
 function visibleProducts(){
   var list=catProducts(S.pick.cat).filter(function(p){return productMatches(p,S.pick.q);});
-  /* The fan list follows the room type in step 3, because the two kinds of
-     fan go in different rooms and neither can be placed in the other's.
-     Bathrooms and laundries see exhausts; everywhere else sees ceiling fans. */
-  if(S.pick.cat==='fans')
-    list=list.filter(wetRoomSelected() ? isBathroomFitting
-                                       : function(p){return !isBathroomFitting(p);});
   var rec=recommendedId();
   return list.slice().sort(function(a,b){
     return (b.id===rec?1:0)-(a.id===rec?1:0);
