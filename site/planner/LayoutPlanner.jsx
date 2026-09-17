@@ -101,6 +101,9 @@ export default function LayoutPlanner() {
             {' '}
             <span className="nextup-s" id="nextup-s" />
           </button>
+          {/* Once the plan is in and the scale is set, steps 01 and 02 fold
+              away into this one line — with a way back if anything changes. */}
+          <div className="setupbar" id="setupbar" hidden />
           {/* STEP 1 */}
           <section className="step open" data-step="1">
             <button type="button" className="step-head">

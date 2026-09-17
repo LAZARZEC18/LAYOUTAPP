@@ -866,6 +866,15 @@
 .gh-planner .ropt input[type=radio]:checked ~ span b{color:var(--eco-link)}
 .gh-planner .ropt input[type=checkbox]:checked ~ span b{color:var(--eco-link)}
 .gh-planner .ropt-tick.on{border-color:var(--glow);background:#fff}
+/* A finished setup step leaves the rail; the bar below stands in for both. */
+.gh-planner .step.gone{display:none}
+.gh-planner .setupbar{display:flex;align-items:center;gap:8px;padding:9px 16px;
+  border-bottom:1px solid var(--line-soft);background:var(--paper-2);
+  font-family:"JetBrains Mono",ui-monospace,monospace;font-size:10.5px;color:var(--muted)}
+.gh-planner .setupbar[hidden]{display:none}
+.gh-planner .setupbar .sb-t{color:#14150f;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.gh-planner .setupbar .sb-v{color:var(--eco)}
+.gh-planner .setupbar .linkbtn{margin-left:auto;font-size:10.5px}
 /* A Done button on the how-to card, so nobody has to know about Esc. */
 .gh-planner .howto .howto-done{margin-top:10px;width:100%}/* The pendant button carries a drawn mark rather than a glyph, so the icon
    slot has to cope with an inline SVG as well as a character. */
