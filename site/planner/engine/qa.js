@@ -731,14 +731,20 @@ window.__GHQA=function(){
   ok('and the count it was given',/\d/.test(d.querySelector('.donep-nm .q').textContent),
      d.querySelector('.donep-nm .q').textContent);
   eq('the step header reports the progress',d.getElementById('st3').textContent,'1 room done');
-  ok('the finished row can change what the room is',
+  ok('Edit opens a finished room back up to change it',
      (function(){
-       var sel=d.querySelector('[data-donetype]');
+       d.querySelector('[data-doneedit]').click();
+       var r=G.S.rooms[0];
+       if(!G.roomIsOpen(r)) return false;
+       var sel=d.querySelector('[data-roomtype]');
        sel.value='kitchen'; sel.dispatchEvent(new window.Event('change'));
        return G.S.rooms[0].type==='kitchen';
      })(),G.S.rooms[0].type);
-  (function(){var sel=d.querySelector('[data-donetype]');sel.value='living';
-    sel.dispatchEvent(new window.Event('change'));})();
+  (function(){
+    var sel=d.querySelector('[data-roomtype]');
+    if(sel){ sel.value='living'; sel.dispatchEvent(new window.Event('change')); }
+    delete G.S.roomEdit[G.S.rooms[0].id]; G.renderAll();
+  })();
   eq('and it is still one row afterwards',d.querySelectorAll('.donep-row').length,1);
   ok('a finished room can be removed from that row',
      (function(){
@@ -1241,26 +1247,25 @@ window.__GHQA=function(){
     ok('the row is named the same as the room card',
        d.querySelector('#donep-b .donep-nm b').textContent==='Kitchen',
        d.querySelector('#donep-b .donep-nm b').textContent);
-    ok('the row carries a dropdown to change that room\u2019s light',
-       !!d.querySelector('#donep-b [data-donelight="'+k1.id+'"]'),'no dropdown');
-    ok('the dropdown is showing the light actually in the room',
-       d.querySelector('#donep-b [data-donelight="'+k1.id+'"]').value===
-         G.roomFittingFor(k1).id,
-       d.querySelector('#donep-b [data-donelight="'+k1.id+'"]').value);
-    ok('smart lights are reachable from that dropdown too',
-       d.querySelector('#donep-b [data-donelight="'+k1.id+'"] optgroup[label^="Smart"]')!==null,
-       'no smart group');
+    /* The row is one line now: name, count, Edit, remove. Changing the light
+       happens on the card that Edit opens, not in the list. */
+    ok('the row carries an Edit button',
+       !!d.querySelector('#donep-b [data-doneedit="'+k1.id+'"]'),'no edit button');
+    ok('and a remove button',
+       !!d.querySelector('#donep-b [data-donedel="'+k1.id+'"]'),'no remove button');
+    ok('the row no longer carries a light dropdown',
+       !d.querySelector('#donep-b [data-donelight]'),'dropdown still there');
     /* an unfinished room must not appear - the panel is a record of progress */
     ok('the unfinished bedroom is not listed as finished',
-       !d.querySelector('#donep-b [data-donelight="'+b1.id+'"]'),'unfinished room listed');
-    /* changing the light from the panel re-lays the room */
-    var before=G.roomFittings(k1);
-    var dsel=d.querySelector('#donep-b [data-donelight="'+k1.id+'"]');
-    dsel.value='DL9ES-FLAT-HL';
-    dsel.onchange();
-    eq('changing it from the panel changes the room\u2019s fitting',
-       G.roomFittingFor(k1).id,'DL9ES-FLAT-HL');
-    ok('and the room is still lit afterwards',G.roomFittings(k1)>0,before);
+       !d.querySelector('#donep-b [data-doneedit="'+b1.id+'"]'),'unfinished room listed');
+    /* Edit opens that room back up as a full card */
+    d.querySelector('#donep-b [data-doneedit="'+k1.id+'"]').click();
+    ok('pressing Edit opens the finished room again',G.roomIsOpen(k1),'stayed shut');
+    ok('and it is still listed as finished while being edited',
+       d.querySelectorAll('#donep-b .donep-row').length===1,'row vanished');
+    delete S.roomEdit[k1.id];
+    G.renderAll();
+    ok('closing it puts it back to a row',!G.roomIsOpen(k1),'stayed open');
     S.rooms=[]; S.fixtures=[]; S.roomPid={}; G.renderAll();
     ok('with every room gone the panel goes away again',
        d.getElementById('donep').hidden,'panel still showing');

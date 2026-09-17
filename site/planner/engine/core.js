@@ -552,6 +552,7 @@ var S={
   pick:{cat:'downlights',pid:null,qty:4,arr:'row',q:''},
   ownName:'', ownPrice:'',            // the customer's own pendant
   roomOpen:{},
+  roomEdit:{},                    // room id -> they asked to open a finished room back up
   roomInfoOpen:{},                // room id -> the "Total information" block is open
   roomMoreOpen:{},                // room id -> the full catalogue list is open
   fanPlan:'ask',                  // whole-job answer: 'ask' | 'none' | 'light' | 'nolight'
@@ -1277,16 +1278,28 @@ function renderScaleWarn(){
 function renderScaleBox(){
   var w=document.getElementById('scalebox'); if(!w) return;
   if(!S.mpp){ w.innerHTML=''; return; }
+  /* Getting the scale wrong is the one mistake that quietly ruins everything
+     downstream, so there are three ways back to it: drag the points again,
+     check a known length with the tape, or type the number straight in. */
   w.innerHTML=
     '<label class="qlabel">Scale in use</label>'+
-    '<div class="row2"><input class="txt" id="pxm" type="number" step="0.1" min="1" value="'+(1/S.mpp).toFixed(1)+'">'+
-    '<button type="button" class="act ghost sm" id="btn-tape">Check with the tape</button></div>'+
-    '<div class="hint">1 metre = the pixels above. The plan covers <b>'+(S.plan.w*S.mpp).toFixed(1)+' × '+
-      (S.plan.h*S.mpp).toFixed(1)+' m</b>.'+
-      (S.measure?' Last measured: <b>'+S.measure.toFixed(2)+' m</b>.':'')+'</div>';
+    '<div class="hint" style="margin:0 0 8px">The plan covers <b>'+(S.plan.w*S.mpp).toFixed(1)+' × '+
+      (S.plan.h*S.mpp).toFixed(1)+' m</b>. Does that sound right for this building?'+
+      (S.measure?' Last measured: <b>'+S.measure.toFixed(2)+' m</b>.':'')+'</div>'+
+    '<button type="button" class="act pri sm" id="btn-redoscale" style="width:100%">Drag the 2 points again</button>'+
+    '<button type="button" class="act ghost sm" id="btn-tape" style="width:100%;margin-top:6px">Check a known length with the tape</button>'+
+    '<details class="whyd" style="margin-top:8px"><summary>Type the number instead</summary>'+
+      '<div class="row2" style="margin-top:8px"><input class="txt" id="pxm" type="number" step="0.1" min="1" value="'+(1/S.mpp).toFixed(1)+'">'+
+      '<span class="hint" style="align-self:center">pixels per metre</span></div>'+
+    '</details>';
   document.getElementById('pxm').onchange=function(){
     var v=parseFloat(this.value);
     if(v>0){ snapshot(); S.mpp=1/v; renderAll(); toast('Scale adjusted'); }
+  };
+  document.getElementById('btn-redoscale').onclick=function(){
+    openStep(2);
+    setTool('scale');
+    toast('Drag the 2 red points onto something you know the length of');
   };
   document.getElementById('btn-tape').onclick=function(){ setTool(S.tool==='measure'?'select':'measure'); };
 }
@@ -1298,7 +1311,9 @@ function renderScaleBox(){
 var setupShown=false;
 function renderSetupBar(){
   var bar=document.getElementById('setupbar'); if(!bar) return;
-  var done = S.plan.loaded && !!S.mpp && !setupShown;
+  /* Never while they are still dragging the points - that is the moment the
+     whole section used to vanish from under them. */
+  var done = S.plan.loaded && !!S.mpp && !setupShown && S.tool!=='scale';
   step(1).classList.toggle('gone',done);
   step(2).classList.toggle('gone',done);
   if(!done){ bar.hidden=true; bar.innerHTML=''; return; }
@@ -1849,8 +1864,11 @@ function roomIsDone(r){
 }
 // Collapsed once finished, unless the person has opened it back up themselves.
 function roomIsOpen(r){
+  /* Done means done: one small row in the finished list. The only way a
+     finished room opens back up is the Edit button on that row. */
+  if(roomIsDone(r)) return !!S.roomEdit[r.id];
   if(Object.prototype.hasOwnProperty.call(S.roomOpen,r.id)) return S.roomOpen[r.id];
-  return !roomIsDone(r);
+  return true;
 }
 
 /* What a room is called on this plan. One kitchen is "Kitchen"; three
@@ -1882,65 +1900,22 @@ function renderDoneRooms(){
   if(cnt) cnt.textContent=done.length+' of '+S.rooms.length;
 
   body.innerHTML=done.map(function(r){
-    var p=roomFittingFor(r), q=roomFittings(r);
+    var q=roomFittings(r);
     var sel=S.sel.length && S.fixtures.some(function(f){
       return S.sel.indexOf(f.id)>-1 && pointInRect(f.x,f.y,r); });
-    /* A fan with a light in it has no downlights to swap, so that row shows
-       what is in the room and offers no dropdown - offering one would imply
-       a choice that does not exist. */
-    var fanOnly=roomFanMode(r)==='light';
-    var opts='';
-    if(!fanOnly){
-      var fanRoom=!!roomFanMode(r);
-      var groups=fanRoom
-        ? [['downlights','Low glare downlights'],['smart','Smart & colour changing']]
-        : [['downlights','Downlights'],['smart','Smart & colour changing'],
-           ['ceiling','Ceiling & wall lights'],['batten','Battens'],['star','Star lights']];
-      /* Dedupe on the line the customer reads, not on the product id. Two
-         different ids that trim down to the same words are the same choice as
-         far as anyone looking at the list is concerned, and showing both is
-         how the picker ended up with "90mm 9W Downlight" twice in a row. */
-      var taken={}, cur=(p||{}).id, sawCur=false;
-      groups.forEach(function(g){
-        var list=pickerGroupProducts(g[0]).filter(function(pp){
-          var k=pickerLabel(pp).toLowerCase();
-          if(taken[k] && pp.id!==cur) return false; taken[k]=1; return true;
-        });
-        if(fanRoom) list=list.filter(function(pp){return fittingClass(pp)==='lg';});
-        if(!list.length) return;
-        opts+='<optgroup label="'+g[1]+'">'+list.map(function(pp){
-          if(pp.id===cur) sawCur=true;
-          return '<option value="'+pp.id+'"'+(pp.id===cur?' selected':'')+'>'+
-                 esc(pickerLabel(pp))+'</option>';
-        }).join('')+'</optgroup>';
-      });
-      /* The groups are a curated short list, so a room can be lit by
-         something that is not in any of them - anything chosen through "Show
-         every light we sell" on the room card. Without this the dropdown
-         silently displayed the wrong fitting, and touching it would have
-         changed the room to whatever happened to be first. */
-      if(cur && !sawCur){
-        var cp=byId(cur);
-        if(cp) opts='<optgroup label="In this room"><option value="'+cp.id+
-                    '" selected>'+esc(plainName(cp))+'</option></optgroup>'+opts;
-      }
-    }
+    /* One line per finished room: what it is, how many went in, and the two
+       ways to act on it. Everything else - the type, the fitting, the fan -
+       lives on the card that Edit opens, so this list stays readable at six
+       rooms the way it did at one. */
     return '<div class="donep-row'+(sel?' on':'')+'">'+
       '<button type="button" class="donep-nm" data-donejump="'+r.id+'" '+
         'title="Show this room on the plan">'+
         '<span class="tick">\u2713</span><b>'+esc(roomName(r))+'</b>'+
         '<span class="q">'+q+'\u00d7</span></button>'+
+      '<button type="button" class="donep-e" data-doneedit="'+r.id+'" '+
+        'title="Open this room to change it">Edit</button>'+
       '<button type="button" class="donep-x" data-donedel="'+r.id+'" '+
         'title="Remove this room" aria-label="Remove '+esc(roomName(r))+'">\u00d7</button>'+
-      /* Change what the room IS without drawing the box again - the thing
-         people were doing by deleting the room and starting over. */
-      '<select class="donep-type" data-donetype="'+r.id+'" aria-label="What '+esc(roomName(r))+' is">'+
-        Object.keys(ROOMS).map(function(k){
-          return '<option value="'+k+'"'+(k===r.type?' selected':'')+'>'+esc(ROOMS[k].label)+'</option>';
-        }).join('')+'</select>'+
-      (fanOnly
-        ? '<div class="q" style="font-size:10.5px;color:#6b6e5f">Fan light \u2014 no downlights</div>'
-        : '<select data-donelight="'+r.id+'" aria-label="Light in '+esc(roomName(r))+'">'+opts+'</select>')+
     '</div>';
   }).join('');
 
@@ -1975,20 +1950,19 @@ function renderDoneRooms(){
   body.querySelectorAll('[data-donedel]').forEach(function(b){
     b.onclick=function(){ removeRoom(b.dataset.donedel); };
   });
-  /* Changing the light here does exactly what changing it on the room card
-     does - one code path, so the two can never disagree. */
-  body.querySelectorAll('[data-donelight]').forEach(function(sel){
-    sel.onchange=function(){
-      var r=S.rooms.filter(function(x){return x.id===sel.dataset.donelight;})[0];
-      var p=byId(sel.value);
-      if(!r||!p) return;
-      snapshot();
-      S.roomPid[r.id]=p.id; S.roomPidAll=p.id;
-      if(S.mpp) doFill(r);
-      renderAll();
-      toast(roomName(r)+' \u2014 '+plainName(p));
+  body.querySelectorAll('[data-doneedit]').forEach(function(b){
+    b.onclick=function(){
+      var id=b.dataset.doneedit;
+      S.rooms.forEach(function(x){ delete S.roomEdit[x.id]; });   /* one at a time */
+      S.roomEdit[id]=true; S.hiRoom=id;
+      openStep(3); renderAll(); flashRoom(id);
+      var card=document.querySelector('[data-toggle="'+id+'"]');
+      if(card&&card.scrollIntoView) card.scrollIntoView({block:'center',behavior:'smooth'});
     };
   });
+  /* Changing the light here does exactly what changing it on the room card
+     does - one code path, so the two can never disagree. */
+
 }
 
 /* Pulse a room's box so the eye lands on it. "Which room am I looking at"
@@ -2083,7 +2057,7 @@ function removeRoom(id){
     if(S.hiRoom===gone.id) S.hiRoom=null;
   }
   S.rooms=S.rooms.filter(function(r){return r.id!==id;});
-  delete S.roomOpen[id]; delete S.roomFan[id]; delete S.roomFanSize[id];
+  delete S.roomOpen[id]; delete S.roomEdit[id]; delete S.roomFan[id]; delete S.roomFanSize[id];
   delete S.roomFanManual[id]; delete S.roomExhaust[id]; delete S.roomComfort[id];
   delete S.roomAskFan[id]; delete S.roomPid[id];
   renderAll();
@@ -2340,6 +2314,10 @@ function renderRoomList(){
       var id=b.dataset.toggle;
       var r=S.rooms.filter(function(x){return x.id===id;})[0];
       var opening=!roomIsOpen(r);
+      if(roomIsDone(r)){
+        /* Toggling a finished room is really toggling "I want to edit this". */
+        if(opening) S.roomEdit[id]=true; else delete S.roomEdit[id];
+      }
       /* One room open at a time. Six cards open at once was the rail people
          called "too much on the side", and it buried the room being worked on. */
       S.rooms.forEach(function(x){ S.roomOpen[x.id]=(opening&&x.id===id); });
@@ -2912,6 +2890,9 @@ function setTool(t){
   if(t!=='place'){ hideHowTo(); if(specPick){ specPick=null; if(typeof renderSpecial==='function') renderSpecial(); } }
   if(t==='scale') armCalHandles();
   else if(el&&el.gGuide&&el.gGuide.querySelector('.cal-grab')) guideClear();
+  /* Entering or leaving the scale tool changes whether the setup steps are
+     allowed to fold away, so keep that bar in step with it. */
+  if(typeof renderSetupBar==='function') renderSetupBar();
   var ph=$('#planhint');
   if(ph){
     var big={scale:['Drag the 2 red points to a known length','Then type what that length really is'],
@@ -3017,17 +2998,29 @@ function renderCalHandles(){
     h.setAttribute('class','cal-node cal-grab'); el.gGuide.appendChild(h);
   });
 }
+/* Show or hide "Use this scale" from wherever the points last moved. */
+function refreshCalApply(){
+  var ap=document.getElementById('btn-calapply'); if(!ap) return;
+  var ready = !!S.cal.px && calReady();
+  ap.disabled=!ready;
+  ap.style.display=ready?'':'none';
+  ap.textContent='Use this scale \u2192';
+}
 function armCalHandles(){
   if(!el||!el.canvas||!el.gGuide) return;
   if(!S.cal.a||!S.cal.b){ var d=defaultCalPoints(); S.cal.a=d.a; S.cal.b=d.b; }
   S.cal.px=Math.hypot(S.cal.b.x-S.cal.a.x,S.cal.b.y-S.cal.a.y);
   renderCalHandles();
+  refreshCalApply();
 }
 function updateCalFromHandles(commit){
   if(!S.cal.a||!S.cal.b) return;
   S.cal.px=Math.hypot(S.cal.b.x-S.cal.a.x,S.cal.b.y-S.cal.a.y);
   renderCalHandles();
-  if(commit&&S.cal.px>=8&&calRefLength()) applyScale();
+  /* Live: the metres update as you drag, and the points stay where you put
+     them. Moving on is a separate, deliberate press - see applyScale. */
+  refreshCalApply();
+  if(commit&&S.cal.px>=8&&calReady()) setScaleFromCal();
 }
 
 function onDown(e){
@@ -3932,21 +3925,31 @@ function calRefLength(){
   if(!r) return undefined;
   return r==='custom' ? null : parseFloat(r);
 }
-function applyScale(){
+/* Work out the scale from where the two points are sitting, and say so - but
+   leave the points on the plan and the step open, so they can keep adjusting.
+   Returns false if something needed is still missing. */
+function setScaleFromCal(){
   var preset=calRefLength();
-  if(preset===undefined){toast('Pick what you are measuring first');$('#calref').focus();return;}
+  if(preset===undefined){toast('Pick what you are measuring first');$('#calref').focus();return false;}
   var v=preset!=null?preset:calNum($('#callen').value);
   var u=preset!=null?1:parseFloat($('#calunit').value);
-  if(!v||v<=0){toast('Type the real length first');return;}
-  if(!S.cal.px){toast('Put the 2 points on the plan first');return;}
+  if(!v||v<=0){toast('Type the real length first');$('#callen').focus();return false;}
+  if(!S.cal.px){toast('Put the 2 points on the plan first');return false;}
   snapshot();
   S.mpp=(v*u)/S.cal.px;
-  guideClear();
-  toast('Scale set — 1 m is '+(1/S.mpp).toFixed(1)+' pixels');
   $('#teach-scale').innerHTML='<h5>Scale locked in</h5>Your plan reads <b>'+
     (1/S.mpp).toFixed(1)+' px per metre</b>. The sheet covers about <b>'+
     (S.plan.w*S.mpp).toFixed(1)+' × '+(S.plan.h*S.mpp).toFixed(1)+' m</b>. '+
-    'If that looks wrong, set the 2 points again — everything downstream depends on it.';
+    'If that looks wrong, drag the 2 points again — everything downstream depends on it.';
+  renderAll();
+  renderCalHandles();          /* renderAll clears the guide layer */
+  return true;
+}
+/* The deliberate one: set it, put the tool away and move on to the rooms. */
+function applyScale(){
+  if(!setScaleFromCal()) return;
+  guideClear();
+  toast('Scale set — 1 m is '+(1/S.mpp).toFixed(1)+' pixels');
   setTool('select');
   renderAll();
   openStep(3);
@@ -4007,15 +4010,12 @@ function wire(){
     $('#calcustom').style.display=custom?'':'none';
     var ok=calReady();
     $('#btn-cal').disabled=!ok;
-    $('#btn-calapply').disabled=!ok;
-    if(ok && S.cal.px) applyScale();
+    refreshCalApply();
+    if(ok && S.cal.px) setScaleFromCal();
     else if(S.tool==='scale') setTool('scale');   // refresh the on-plan instruction
   }
   $('#calref').onchange=calSync;
-  $('#callen').oninput=function(){
-    var ok=calReady();
-    $('#btn-cal').disabled=!ok; $('#btn-calapply').disabled=!ok;
-  };
+  $('#callen').oninput=function(){ calSync(); };
   calSync();
   $('#callen').addEventListener('keydown',function(e){
     if(e.key!=='Enter') return;
