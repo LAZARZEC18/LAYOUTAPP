@@ -287,16 +287,23 @@ function fillPoints(w,h,spacing,off){
 /* `exact` is for a room whose count is pinned rather than suggested - a
    bathroom is two lights whatever it measures, so the grid search is not
    allowed to quietly settle on one. */
-/* The gap you want at the wall is half the gap between the fittings - that is
-   what makes a grid read as evenly divided. Holding the offset at the flat
-   650-750 mm rule on both axes left the middle of the room with a gap twice as
-   wide as the ones at the walls, which is what looks wrong on a plan. So the
-   offset is allowed to grow to the even-division point, but never tighter than
-   the rule and never more than 1.1 m off a wall. */
-function axisOffset(len,n,off){
+/* The gap at the wall is half the gap between the fittings. That one rule is
+   what makes a grid read as evenly divided, and it is how a sparky sets out:
+   divide the wall into n equal bays and put a light in the middle of each.
+   The planner used to hold a flat 650-750 mm offset instead, which in a small
+   bedroom left 750 mm at the walls and only 1.1 m between the lights - the
+   lights looked bunched in the middle with a bright border round them.
+   Floored at 500 mm so nothing ends up on top of a cornice, and capped at
+   1 m because past that the room wants another fitting, not a wider gap.
+   Those two numbers are the band the tutorial teaches (home.js wallVerdict),
+   so the app never lays out something its own lesson calls wrong. */
+function axisOffset(len,n){
   if(n<=1) return len/2;
-  return clamp(len/(2*n), off, Math.max(off,1.1));
+  return clamp(len/(2*n), 0.5, Math.max(0.5,Math.min(1.0,len/2)));
 }
+/* `off` is the old flat wall offset. The set-out no longer uses it - axisOffset
+   works each wall out from the room itself - but every caller and the test
+   suite still pass it, so the argument stays. */
 function gridInRoom(w,h,n,off,exact){
   if(n<=0) return [];
   var target=spacingFor(S.ceiling, 100);      /* the spacing we aim for */
@@ -309,8 +316,8 @@ function gridInRoom(w,h,n,off,exact){
          real cost. Bigger rooms can move by two to square the grid off. */
       var slack = exact ? 0 : (n<=4 ? 1 : 2);
       if(Math.abs(total-n)>slack) continue;
-      var sx = c===1 ? w : (w-2*axisOffset(w,c,off))/(c-1);
-      var sy = r===1 ? h : (h-2*axisOffset(h,r,off))/(r-1);
+      var sx = c===1 ? w : (w-2*axisOffset(w,c))/(c-1);
+      var sy = r===1 ? h : (h-2*axisOffset(h,r))/(r-1);
       /* Prefer even spacing in both directions, spacing near the rule of
          thumb, and a count close to the recommendation - in that order. */
       var score = Math.abs(sx-sy)*1.0
@@ -324,7 +331,7 @@ function gridInRoom(w,h,n,off,exact){
 
   var pts=[], x, y, i, j, ox, oy, uw, uh;
   if(best){
-    ox=axisOffset(w,best.c,off); oy=axisOffset(h,best.r,off);
+    ox=axisOffset(w,best.c); oy=axisOffset(h,best.r);
     uw=Math.max(0,w-2*ox); uh=Math.max(0,h-2*oy);
     for(j=0;j<best.r;j++){
       y = best.r===1 ? h/2 : oy + j*uh/(best.r-1);
@@ -340,7 +347,7 @@ function gridInRoom(w,h,n,off,exact){
      it reads as deliberate rather than as a missing fitting. */
   var cols=clamp(Math.round(Math.sqrt(n*(w/h))),1,n);
   var rows=Math.ceil(n/cols), cnt, span, x0;
-  ox=axisOffset(w,cols,off); oy=axisOffset(h,rows,off);
+  ox=axisOffset(w,cols); oy=axisOffset(h,rows);
   uw=Math.max(0,w-2*ox); uh=Math.max(0,h-2*oy);
   for(j=0;j<rows;j++){
     cnt = (j<rows-1)? cols : (n-cols*(rows-1));
@@ -2133,17 +2140,15 @@ function renderRoomList(){
         var fsz=S.roomFanSize[r.id]||'';
         var fl=a?fanForRoomSized(a,true,fsz):null, fnl=a?fanForRoomSized(a,false,fsz):null;
         var cur=roomFanMode(r)||'';
-        /* Three big rows you can read and press, instead of a dropdown you
-           have to open before you can see what the choices even are. */
-        function fopt(val,title,sub){
-          /* While the room is still asking, no row is ticked - "No fan" is a
-             real answer as well as the empty state, and showing it selected
-             made the question look like it had already been dealt with. */
+        /* One line, the same as every other question on this card. Three tall
+           rows for a question most rooms answer "no" to was the single biggest
+           thing making a new room card a scroll. */
+        function fopt(val,title){
+          /* While the room is still asking, nothing is selected - "No fan" is a
+             real answer as well as the empty state, and showing it chosen made
+             the question look like it had already been dealt with. */
           var on=!asking && cur===val;
-          return '<label class="ropt'+(on?' on':'')+'">'+
-                 '<input type="radio" name="rf-'+r.id+'" value="'+val+'" data-roomfan="'+r.id+'"'+
-                 (on?' checked':'')+'>'+
-                 '<span><b>'+title+'</b><em>'+sub+'</em></span></label>';
+          return '<option value="'+val+'"'+(on?' selected':'')+'>'+title+'</option>';
         }
         return (asking
             ? '<div class="rask"><b>First \u2014 is there a fan in this '+
@@ -2151,11 +2156,14 @@ function renderRoomList(){
               '<em>A fan with a light in it does the room on its own, so the answer changes how many downlights go in. Nothing is laid out until you pick one.</em></div>'
             : '')+
           '<div class="rsub">Ceiling fan</div>'+
-          fopt('','No fan in this room','Just lights.')+
-          fopt('light','A fan with a light in it',
-               (fl?esc(fanShortName(fl))+' \u2014 ':'')+'the fan\u2019s own light does the room, so no downlights go in.')+
-          fopt('nolight','A fan, and downlights for the light',
-               (fnl?esc(fanShortName(fnl))+' \u2014 ':'')+FAN_DL_COUNT+' low glare downlights go around it, clear of the blades.')+
+          '<div class="selwrap"><select class="sel" data-roomfan="'+r.id+'">'+
+          (asking?'<option value="__ask" disabled selected>Choose one\u2026</option>':'')+
+          fopt('','No fan in this room \u2014 just lights')+
+          fopt('light','A fan with a light in it'+
+               (fl?' \u2014 '+esc(fanShortName(fl)):'')+', no downlights')+
+          fopt('nolight','A fan, and '+FAN_DL_COUNT+' low glare downlights round it'+
+               (fnl?' \u2014 '+esc(fanShortName(fnl)):''))+
+          '</select></div>'+
           /* Blade count only matters once a fan is going in. Auto follows the
              manufacturers' sizing; 4 and 5 pin the 52" and 56" by hand. */
           (cur?'<div class="rsub" style="margin-top:10px">Blades</div>'+
@@ -2178,26 +2186,20 @@ function renderRoomList(){
         var asMeasured=applyComfort(countForRoom(a? r.w*S.mpp:0, a? r.h*S.mpp:0,
                                     (rec&&rec.klass)||'std'),'');
         var midIsReal = asMeasured>COMFORT.less && asMeasured<COMFORT.more;
-        function copt(val,title,sub2,forceOn){
+        function copt(val,title,forceOn){
           var on = cm===val || (!cm && forceOn);
-          return '<label class="ropt'+(on?' on':'')+'">'+
-                 '<input type="radio" name="rc-'+r.id+'" value="'+val+'" data-roomcomfort="'+r.id+'"'+
-                 (on?' checked':'')+'>'+
-                 '<span><b>'+title+'</b><em>'+sub2+'</em></span></label>';
+          return '<option value="'+val+'"'+(on?' selected':'')+'>'+title+'</option>';
         }
         return '<div class="rsub">How much light in here?</div>'+
-          '<p class="rhint">A room this size can be run two ways and both are right. '+
-          'Fewer fittings is calmer to sit in; more is brighter to work in.</p>'+
-          copt('less','Less light, more comfortable',
-               COMFORT.less+' fittings \u2014 softer and easier on the eye at night. Best for a lounge you sit in.',
+          '<div class="selwrap"><select class="sel" data-roomcomfort="'+r.id+'">'+
+          copt('less','Less light, calmer \u2014 '+COMFORT.less+' fittings',
                asMeasured<=COMFORT.less)+
           (midIsReal
-            ? copt('','As measured',
-                   'Whatever the room size calls for \u2014 '+asMeasured+' here. The middle road.',true)
+            ? copt('','As measured \u2014 '+asMeasured+' fittings',true)
             : '')+
-          copt('more','More light, brighter',
-               COMFORT.more+' fittings \u2014 an even, bright wash. Best for open plan with a kitchen in it.',
-               asMeasured>=COMFORT.more);
+          copt('more','More light, brighter \u2014 '+COMFORT.more+' fittings',
+               asMeasured>=COMFORT.more)+
+          '</select></div>';
       })()+
       (function(){
         if(!brief.exhaust) return '';
@@ -2240,7 +2242,16 @@ function renderRoomList(){
              ['ceiling','Ceiling & wall lights'],
              ['batten','Battens'],['star','Star lights']];
         var current=(roomFittingFor(r)||{}).id;
-        var recId=((recommendProduct(r.type)||{}).p||{}).id;
+        /* "Our pick" has to be the fitting this room actually gets if nobody
+           touches the dropdown, or the list ticks one line and calls a
+           different one our pick - which is exactly what it was doing.
+           recommendProduct answers a different question (best lumens per
+           dollar in the catalogue) and belongs in the teaching copy. */
+        var recId=(function(){
+          if(!brief.dl) return ((garageFitting()||byId(DL_DEFAULT))||{}).id;
+          if(fanRoom)   return ((lowGlareDownlight()||byId(DL_DEFAULT))||{}).id;
+          return DL_DEFAULT;
+        })();
         var opts='';
         var takenInGroup={};
         groups.forEach(function(g){
@@ -2373,6 +2384,9 @@ function renderRoomList(){
       if(!r) return;
       /* "No fan" has to stick even when there is a fan sitting in the box,
          so it is stored rather than just cleared. */
+      /* The placeholder while the room is still asking. It carries its own
+         value so it cannot be mistaken for "No fan", which is an empty one. */
+      if(sel.value==='__ask') return;
       var fresh=!!S.roomAskFan[r.id];
       S.roomFan[r.id]=sel.value||'none';
       /* Set by hand, so the whole-house fan answer must not overwrite it later. */

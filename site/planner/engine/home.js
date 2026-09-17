@@ -26,7 +26,11 @@ var CEIL=2.7;
 
 /* ---------- the two rules the exercises teach ---------- */
 function spacingVerdict(m){ return m<1.5?'close' : 'ok'; }   /* no upper limit - further apart is a choice, not a fault */
-function wallVerdict(mm){ return mm<650?'close' : mm>750?'far' : 'ok'; }
+/* The set-out rule is that the gap at the wall is half the gap between the
+   lights, so the right number depends on the room: about 650 mm across a
+   2.6 m bedroom, about 875 mm across a 3.5 m one. 600-1000 mm is the band
+   that covers a normal house, which is what the planner now lays out. */
+function wallVerdict(mm){ return mm<600?'close' : mm>1000?'far' : 'ok'; }
 function distM(a,b){ return Math.hypot(a.x-b.x,a.y-b.y)/PXM; }
 function wallMM(p){
   var d=Math.min(p.x-ROOM.x, ROOM.x+ROOM.w-p.x, p.y-ROOM.y, ROOM.y+ROOM.h-p.y);
@@ -314,13 +318,15 @@ function walls(g){
    '<h2>Light the walls, not just the floor.</h2>'+
    '<p><b>Lit walls make a room feel bright.</b> You see much more wall than floor, so light on '+
    'the walls does more than light on the carpet.</p>'+
-   '<div class="rule"><div class="k">Recommended</div><div class="v">650 – 750 mm</div>'+
-   '<div class="s">Wall to the middle of the hole. In that range the light hits the wall '+
-   '<em>and</em> the floor, so the room gets brighter without adding a light. '+
-   'The app does this for you.</div></div>'+
-   '<div class="legend"><span><i class="dot r"></i>Under 650 mm — streaks on the wall</span>'+
-   '<span><i class="dot g"></i>650–750 mm — wall and floor both lit</span>'+
-   '<span><i class="dot a"></i>Over 750 mm — dark walls, room feels smaller</span></div>'+
+   '<div class="rule"><div class="k">Recommended</div><div class="v">600 – 1000 mm</div>'+
+   '<div class="s">Wall to the middle of the hole. The rule behind it: <b>the gap at the '+
+   'wall is half the gap between the lights</b> — about 650 mm across a 2.6 m bedroom, '+
+   'about 875 mm across a 3.5 m one. In that range the light hits the wall <em>and</em> '+
+   'the floor, so the room gets brighter without adding a light. The app works it out '+
+   'for every room you mark.</div></div>'+
+   '<div class="legend"><span><i class="dot r"></i>Under 600 mm — streaks on the wall</span>'+
+   '<span><i class="dot g"></i>600–1000 mm — wall and floor both lit</span>'+
+   '<span><i class="dot a"></i>Over 1000 mm — dark walls, room feels smaller</span></div>'+
    '<div id="v1"></div></div>'+ stage('drag');
   /* One dimension line, wall to fitting. The old version drew a dashed
      rectangle inset from all four walls, which read as a big empty box in the

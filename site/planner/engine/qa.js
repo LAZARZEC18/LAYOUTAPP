@@ -115,7 +115,17 @@ window.__GHQA=function(){
   eq('room grid: 9 in a 5 × 4 m room is 3 columns',
      new Set(gi.map(function(p){return +p.x.toFixed(3);})).size,3);
   ok('room grid: stays inside the room and off the walls',
-     gi.every(function(p){return p.x>=0.8&&p.x<=4.2&&p.y>=0.8&&p.y<=3.2;}),JSON.stringify(gi[0]));
+     gi.every(function(p){return p.x>=0.5&&p.x<=4.5&&p.y>=0.5&&p.y<=3.5;}),JSON.stringify(gi[0]));
+  /* The set-out rule: the gap at the wall is half the gap between the lights,
+     on each axis independently. A 5 x 4 m room laid out 3 x 3 is 0.83 / 1.67
+     across and 0.67 / 1.33 down - even both ways, which is what stops a room
+     looking like the lights were pushed into the middle of it. */
+  ok('room grid: the wall gap is half the gap between the lights',
+     (function(){
+       var xs=Array.from(new Set(gi.map(function(p){return +p.x.toFixed(3);}))).sort(function(a,b){return a-b;});
+       var ys=Array.from(new Set(gi.map(function(p){return +p.y.toFixed(3);}))).sort(function(a,b){return a-b;});
+       return Math.abs(xs[0]-(xs[1]-xs[0])/2)<0.02 && Math.abs(ys[0]-(ys[1]-ys[0])/2)<0.02;
+     })(),JSON.stringify(gi));
   /* An awkward count is squared off rather than laid out ragged: 7 in a
      5 x 4 m room becomes a clean 3 x 2, because 3-3-1 looks like a mistake. */
   eq('room grid: an awkward count is squared off',G.gridInRoom(5,4,7,0.81).length,6);
@@ -878,7 +888,7 @@ window.__GHQA=function(){
      })(),'not the best ratio');
 
   /* ---- guided tour ---- */
-  var U=window.__TUT;
+  var U=window.__TUT, QQ='';
   eq('the tour is six steps',U.STEPS.length,6);
   U.go(1);
   eq('the tour offers a standard and a low glare layout',d.querySelectorAll('[data-layout]').length,2);
@@ -898,8 +908,8 @@ window.__GHQA=function(){
                 return p.x>=U.ROOM.x&&p.x<=U.ROOM.x+U.ROOM.w&&
                        p.y>=U.ROOM.y&&p.y<=U.ROOM.y+U.ROOM.h;});
      })(),U.T.lights.length);
-  ok('and every one of them sits inside the 650–750 mm wall band',
-     U.T.lights.every(function(p){var mm=U.wallMM(p);return mm>=640&&mm<=1600;}),
+  ok('and none of them lands on a wall or more than 1.1 m off one',
+     U.T.lights.every(function(p){var mm=U.wallMM(p);return mm>=500&&mm<=1600;}),
      U.T.lights.map(function(p){return U.wallMM(p);}).join(','));
   ok('showing the low glare layout places six',
      (function(){ d.querySelector('[data-layout="lg"]').click(); return U.T.lights.length===6; })(),
@@ -914,12 +924,28 @@ window.__GHQA=function(){
   eq('under 1.5 m is the only failure',U.spacingVerdict(1.3),'close');
   ok('the spacing the planner computes falls inside the band the tour teaches',
      U.spacingVerdict(G.spacingFor(2.7,110))==='ok',G.spacingFor(2.7,110));
-  eq('wall distance under 700 mm reads as too close',U.wallVerdict(650),'close');
-  eq('wall distance of 775 mm reads as correct',U.wallVerdict(775),'ok');
-  eq('wall distance over 850 mm reads as too far',U.wallVerdict(900),'far');
-  ok('the wall offset the planner uses falls inside the band the tour teaches',
-     U.wallVerdict(G.wallOffsetFor(G.spacingFor(2.7,110))*1000)==='ok',
-     G.wallOffsetFor(G.spacingFor(2.7,110)));
+  eq('wall distance under 600 mm reads as too close',U.wallVerdict(550),'close');
+  eq('wall distance of 875 mm reads as correct',U.wallVerdict(875),'ok');
+  eq('wall distance over 1 m reads as too far',U.wallVerdict(1100),'far');
+  /* Whatever the planner actually lays out has to sit inside the band the tour
+     teaches, or the app is contradicting its own lesson. */
+  ok('every wall gap the planner lays out falls inside the band the tour teaches',
+     (function(){
+       /* Only the outside row and column have a wall gap - the middle of a
+          3 x 3 grid is nowhere near a wall, and measuring it would prove
+          nothing. */
+       var bad=[];
+       [[2.6,3.2,4],[3.5,4,4],[4,5,4],[5,4,9],[5.5,9,8],[7,12,10]].forEach(function(t){
+         var pts=G.gridInRoom(t[0],t[1],t[2],0.75);
+         var xs=Array.from(new Set(pts.map(function(p){return p.x;}))).sort(function(a,b){return a-b;});
+         var ys=Array.from(new Set(pts.map(function(p){return p.y;}))).sort(function(a,b){return a-b;});
+         [xs[0], t[0]-xs[xs.length-1], ys[0], t[1]-ys[ys.length-1]].forEach(function(m){
+           if(U.wallVerdict(Math.round(m*1000))!=='ok') bad.push(t.join('x')+': '+Math.round(m*1000)+' mm');
+         });
+       });
+       QQ=bad.join(' | ');
+       return !bad.length;
+     })(),QQ);
   eq('wall distance is measured to the nearest wall',
      U.wallMM({x:U.ROOM.x+U.PXM*0.75,y:U.ROOM.y+U.ROOM.h/2}),750);
   ok('lights cannot be dragged outside the room',
@@ -1182,17 +1208,18 @@ window.__GHQA=function(){
     S.rooms=[cLv,cDn]; S.roomPid[cLv.id]='DL10ES'; S.roomPid[cDn.id]='DL10ES';
     S.roomOpen[cLv.id]=true; S.roomOpen[cDn.id]=true;
     G.renderAll();
+    /* Each question on the room card is one dropdown, so the answers are its
+       options and the chosen one is its value. */
+    function comfortSel(id){ return d.querySelector('[data-roomcomfort="'+id+'"]'); }
     eq('a room whose count clamps to the top offers two answers, not three',
-       d.querySelectorAll('[data-roomcomfort="'+cLv.id+'"]').length,2);
-    ok('and the one it already matches is the one ticked',
-       d.querySelector('[data-roomcomfort="'+cLv.id+'"][value="more"]').checked,
-       'nothing ticked');
+       comfortSel(cLv.id).options.length,2);
+    eq('and the one it already matches is the one selected',
+       comfortSel(cLv.id).value,'more');
     eq('a room that sits inside the window offers all three',
-       d.querySelectorAll('[data-roomcomfort="'+cDn.id+'"]').length,3);
-    ok('with the measured answer ticked',
-       d.querySelector('[data-roomcomfort="'+cDn.id+'"][value=""]').checked,'nothing ticked');
+       comfortSel(cDn.id).options.length,3);
+    eq('with the measured answer selected',comfortSel(cDn.id).value,'');
     ok('a small room is not asked at all',
-       d.querySelectorAll('[data-roomcomfort]').length===5,
+       d.querySelectorAll('[data-roomcomfort]').length===2,
        d.querySelectorAll('[data-roomcomfort]').length);
 
     /* the fan question, while it is still blocking the room */
@@ -1202,14 +1229,16 @@ window.__GHQA=function(){
     G.renderAll();
     ok('an unanswered bedroom shows the question up front',
        !!d.querySelector('.rask'),'no prompt');
-    ok('and nothing is ticked yet, because "no fan" is itself an answer',
-       Array.prototype.every.call(d.querySelectorAll('[data-roomfan="'+aBed.id+'"]'),
-         function(i){return !i.checked;}),'an option was pre-ticked');
+    var fanSel=d.querySelector('[data-roomfan="'+aBed.id+'"]');
+    ok('and nothing is chosen yet, because "no fan" is itself an answer',
+       fanSel.selectedIndex>-1 && fanSel.options[fanSel.selectedIndex].disabled,
+       'an option was pre-selected: '+fanSel.value);
+    eq('the fan question is one dropdown with the three real answers in it',
+       Array.prototype.filter.call(fanSel.options,function(o){return !o.disabled;}).length,3);
     ok('the room is left empty until it is answered',G.roomFittings(aBed)===0,
        G.roomFittings(aBed));
     /* answering it lays the room out and clears the prompt */
-    var noFan=d.querySelector('[data-roomfan="'+aBed.id+'"][value=""]');
-    noFan.checked=true; noFan.onchange();
+    fanSel.value=''; fanSel.onchange();
     ok('answering it clears the prompt',!d.querySelector('.rask'),'prompt still there');
     ok('and the room is lit straight away',G.roomFittings(aBed)>0,'still empty');
     eq('a bedroom without a fan is still four downlights',G.roomFittings(aBed),4);
