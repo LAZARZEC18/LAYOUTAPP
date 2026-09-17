@@ -269,6 +269,10 @@
 .gh-planner .fx-pool{pointer-events:none}
 .gh-planner #g-pools{mix-blend-mode:multiply}
 .gh-planner .fx.sel circle, .gh-planner .fx.sel rect, .gh-planner .fx.sel polygon{stroke:var(--glow);stroke-width:2.6}
+/* The aim handle is an arrow, nothing else. Its grab area is an invisible
+   circle, and the rule above was drawing a big green ring around it - which
+   read as a second light sitting next to the one you were aiming. */
+.gh-planner .fx.sel .fx-aim circle{stroke:none;fill:transparent}
 .gh-planner .fx.sel .fx-ring{fill:none;stroke:var(--glow);stroke-width:2;stroke-dasharray:5 4}
 .gh-planner .fx{cursor:move}
 .gh-planner .fx-lab{font-family:"JetBrains Mono",monospace;fill:var(--ink);paint-order:stroke;stroke:#fff;stroke-width:3px;stroke-linejoin:round}
