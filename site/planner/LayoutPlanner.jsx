@@ -146,7 +146,7 @@ export default function LayoutPlanner() {
               <i className="chev" />
             </button>
             <div className="step-body">
-              <p className="step-lead">Tell it what you are going to measure, then put 2 points across that thing on the plan. That is the scale set — everything else sizes itself from there.</p>
+              <p className="step-lead">Tell it what you are going to measure, then put 2 points across that thing on the plan. That is the scale set — everything else sizes itself from there. <b>A real measurement off the house is the most accurate thing you can give it.</b></p>
               <div id="paperbox" />
               <div className="q">
                 <label className="qlabel" htmlFor="calref">What are you measuring?</label>
@@ -170,7 +170,12 @@ export default function LayoutPlanner() {
                     </div>
                   </div>
                 </div>
-                <div className="hint" style={{margin:'9px 0 0'}}>The longer the thing you measure, the more accurate the whole plan.</div>
+                <div className="hint" style={{margin:'9px 0 0'}}>
+                  <b>Measure something for real if you can — it is far more accurate than guessing.</b>{' '}
+                  Go and measure a wall, a bench or a hallway in the house and type that length in.
+                  If you cannot get to it, a standard internal door is 820 mm and is on nearly every plan.
+                  The longer the thing you measure, the more accurate the whole plan.
+                </div>
                 <button type="button" className="act pri" id="btn-cal" style={{marginTop:'9px'}} disabled>
                   <svg viewBox="0 0 24 24">
                     <path d="M3 12h18M6 9v6M18 9v6" />
