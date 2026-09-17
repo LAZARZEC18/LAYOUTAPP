@@ -2983,8 +2983,11 @@ function hidePlanHint(){var p=document.getElementById('planhint'); if(p) p.hidde
 function setTool(t){
   S.tool=t;
   el.canvas.className='canvas tool-'+t;
-  $('#btn-place').classList.toggle('pri',t==='place');
-  $('#placelabel').textContent=t==='place'?'Now click the plan':'Put them on the plan';
+  /* The extras catalogue picker is gone from step 4, so its button and label
+     may not be on the page at all. Everything below still runs. */
+  var bp=$('#btn-place'), pl=$('#placelabel');
+  if(bp) bp.classList.toggle('pri',t==='place');
+  if(pl) pl.textContent=t==='place'?'Now click the plan':'Put them on the plan';
   $('#btn-cal').textContent=t==='scale'?'Now drag the 2 red points…':'Put 2 points on the plan';
   $('#btn-room').textContent=t==='room'?'Now drag a box on the plan…':'Drag a box around the room';
   var msg=armedMessage(t);
@@ -3881,17 +3884,20 @@ function validPickCat(){
 }
 function buildSelects(){
   var cat=$('#cat');
-  cat.innerHTML=CATS.map(function(c){
-    return '<option value="'+c.id+'">'+c.label+' ('+catCount(c.id)+')</option>';
-  }).join('');
-  cat.value=validPickCat();
+  if(cat){
+    cat.innerHTML=CATS.map(function(c){
+      return '<option value="'+c.id+'">'+c.label+' ('+catCount(c.id)+')</option>';
+    }).join('');
+    cat.value=validPickCat();
+  }
   var rt=$('#rtype');
   rt.innerHTML=Object.keys(ROOMS).map(function(k){
     return '<option value="'+k+'">'+ROOMS[k].label+'</option>';
   }).join('');
   rt.value=S.roomType;
   var qc=$('#qtychips');
-  qc.innerHTML=[1,2,3,4,6,8,10,12].map(function(n){
+  if(!qc){ refreshProducts(); renderRoomTeach(); return; }
+  qc.innerHTML=[1,2,3,4,5,6].map(function(n){
     return '<button type="button" class="chip'+(n===S.pick.qty?' on':'')+'" data-qty="'+n+'">'+n+'</button>';
   }).join('');
   qc.querySelectorAll('[data-qty]').forEach(function(b){
@@ -3935,10 +3941,13 @@ function thumb(p,cls){
                : '<span class="'+(cls||'noimg')+'"></span>';
 }
 function refreshProducts(){
-  var list=visibleProducts(), all=catProducts(S.pick.cat), rec=recommendedId(), w=$('#prodcards');
+  var w=$('#prodcards');
+  if(!w) return;
+  var list=visibleProducts(), all=catProducts(S.pick.cat), rec=recommendedId();
   if(!all.filter(function(p){return p.id===S.pick.pid;}).length) S.pick.pid=all.length?all[0].id:null;
-  $('#cathint').textContent=(CATS.filter(function(c){return c.id===S.pick.cat;})[0]||{}).hint||'';
-  $('#prodcount').textContent=list.length===all.length?all.length+' available':list.length+' of '+all.length;
+  var ch=$('#cathint'), pc=$('#prodcount');
+  if(ch) ch.textContent=(CATS.filter(function(c){return c.id===S.pick.cat;})[0]||{}).hint||'';
+  if(pc) pc.textContent=list.length===all.length?all.length+' available':list.length+' of '+all.length;
   if(!list.length){
     w.innerHTML='<div class="empty">Nothing matches that.<br>Try a code like DL10ES, or clear the search.</div>';
     return;
@@ -4003,6 +4012,7 @@ function glareCompare(){
 
 function renderPlaceTeach(){
   var p=byId(S.pick.pid),t=$('#teach-place');
+  if(!t) return;
   if(!p){t.innerHTML='';return;}
   var beam=parseBeam(p.beam),lm=parseLumens(p.lumens);
   var sp=spacingFor(S.ceiling,beam);
@@ -4185,14 +4195,15 @@ function wire(){
     setTool(S.tool==='room'?'select':'room');
   };
 
-  // products
-  $('#cat').onchange=function(){
-    S.pick.cat=this.value;S.pick.q='';$('#prodsearch').value='';
+  // products - only wired when the catalogue picker is on the page
+  if($('#cat')) $('#cat').onchange=function(){
+    S.pick.cat=this.value;S.pick.q='';
+    if($('#prodsearch')) $('#prodsearch').value='';
     refreshProducts();renderPlaceTeach();
   };
-  $('#prodsearch').oninput=function(){S.pick.q=this.value.trim();refreshProducts();};
-  $('#arr').onchange=function(){S.pick.arr=this.value;renderPlaceTeach();};
-  $('#btn-place').onclick=function(){
+  if($('#prodsearch')) $('#prodsearch').oninput=function(){S.pick.q=this.value.trim();refreshProducts();};
+  if($('#arr')) $('#arr').onchange=function(){S.pick.arr=this.value;renderPlaceTeach();};
+  if($('#btn-place')) $('#btn-place').onclick=function(){
     if(!S.pick.pid){toast('Pick a fitting first');return;}
     setTool(S.tool==='place'?'select':'place');
     if(S.tool==='place') toast(S.pick.arr==='line'?'Drag across the plan':
@@ -4292,7 +4303,7 @@ function wire(){
     if(e.key==='['){rotateSelected(-1);e.preventDefault();}
     if(e.key===']'){rotateSelected(1);e.preventDefault();}
     if(e.key==='v'||e.key==='V')setTool('select');
-    if(e.key==='p'||e.key==='P')$('#btn-place').click();
+    if((e.key==='p'||e.key==='P')&&$('#btn-place'))$('#btn-place').click();
     if(e.key==='r'||e.key==='R')$('#btn-room').click();
     if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='z'){undo();e.preventDefault();}
     if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='a'){S.sel=S.fixtures.map(function(f){return f.id;});renderFixtures();renderReadout();e.preventDefault();}

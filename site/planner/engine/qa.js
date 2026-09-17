@@ -173,9 +173,12 @@ window.__GHQA=function(){
 
   /* ---- app behaviour against the live DOM ---- */
   var d=document;
-  eq('category picker is populated',d.querySelector('#cat').options.length,G.CATS.length);
-  eq('every product in the picked category gets a card',
-     d.querySelectorAll('#prodcards .pcard').length,G.visibleProducts().length);
+  /* Step 4 is four buttons now - no category dropdown, no search, no product
+     cards. The catalogue is still there for the rooms and the schedule. */
+  ok('step 4 no longer carries a catalogue picker',
+     !d.querySelector('#cat') && !d.querySelector('#prodcards') && !d.querySelector('#prodsearch'),
+     'the picker is still on the page');
+  eq('and it offers the four extras buttons',d.querySelectorAll('#specrow .specbtn').length,4);
   ok('every downlight card carries the product photo from the website',
      /* the single-file build inlines photos as data URIs, the multi-file build
         links them from /img - accept either, reject a blank or a placeholder */
@@ -184,8 +187,6 @@ window.__GHQA=function(){
          (/^data:image\//.test(p.img) || /^\/img\/[^\s]+\.(webp|png|jpe?g|svg)$/i.test(p.img));
      }),
      'a downlight is missing its photo');
-  ok('the selected card is the one in state',
-     d.querySelector('#prodcards .pcard.on').dataset.pid===G.S.pick.pid,'selection out of sync');
   ok('the spec line reports real figures, not guesses',
      G.productSpecLine(G.byId('DL10ES')).indexOf('lm')>-1,G.productSpecLine(G.byId('DL10ES')));
   ok('a product with no lumen figure says so rather than inventing one',
