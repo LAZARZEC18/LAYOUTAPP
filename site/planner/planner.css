@@ -497,12 +497,16 @@
 .gh-planner .donep-nm .q{font-family:"JetBrains Mono",ui-monospace,monospace;font-size:10px;color:#6b6e5f;flex:0 0 auto}
 /* A finished room can be changed or removed from here, so nothing has to be
    drawn twice to fix a wrong pick. */
-.gh-planner .donep-row{position:relative}
-.gh-planner .donep-row .donep-x{position:absolute;top:4px;right:4px;width:20px;height:20px;
-  border:0;background:none;color:#a7a99c;font-size:16px;line-height:1;border-radius:4px;cursor:pointer}
+/* One line per finished room: tick, name, count, Edit, remove. */
+.gh-planner .donep-row{display:flex;align-items:center;gap:6px}
+.gh-planner .donep-nm{flex:1 1 auto;min-width:0;padding:0}
+.gh-planner .donep-row .donep-e{flex:0 0 auto;border:0;background:none;
+  font-family:"JetBrains Mono",ui-monospace,monospace;font-size:9.5px;letter-spacing:.06em;
+  text-transform:uppercase;color:#8a8d7f;padding:3px 5px;border-radius:4px;cursor:pointer}
+.gh-planner .donep-row .donep-e:hover{background:#EEF6F0;color:var(--eco)}
+.gh-planner .donep-row .donep-x{flex:0 0 auto;width:20px;height:20px;border:0;background:none;
+  color:#a7a99c;font-size:16px;line-height:1;border-radius:4px;cursor:pointer}
 .gh-planner .donep-row .donep-x:hover{background:#F3E4DF;color:var(--danger)}
-.gh-planner .donep-nm{padding-right:20px}
-.gh-planner .donep-row select.donep-type{margin-bottom:4px;color:#6b6e5f}
 .gh-planner .donep-row select{
   width:100%;font-size:11px;padding:4px 6px;border:1px solid var(--line-soft);
   background:#fff;color:#2a2c24;border-radius:4px;
