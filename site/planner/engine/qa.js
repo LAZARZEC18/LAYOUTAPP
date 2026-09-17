@@ -1222,6 +1222,23 @@ window.__GHQA=function(){
        d.querySelectorAll('[data-roomcomfort]').length===2,
        d.querySelectorAll('[data-roomcomfort]').length);
 
+    /* One card open at a time. Two rooms open down the rail at once, one of
+       them a finished room somebody had opened to edit, is the "it gets
+       confusing" report - marking a new room has to shut everything else. */
+    S.rooms=[]; S.fixtures=[]; S.roomPid={}; S.roomFan={}; S.roomComfort={};
+    S.roomOpen={}; S.roomEdit={}; S.roomAskFan={};
+    var oA={id:'oA',type:'study',x:0,y:0,w:4*PX,h:4*PX};
+    var oB={id:'oB',type:'study',x:600,y:0,w:4*PX,h:4*PX};
+    S.rooms=[oA,oB];
+    S.roomOpen[oA.id]=true; S.roomEdit[oA.id]=true;
+    G.closeOtherRooms(oB.id); S.roomOpen[oB.id]=true;
+    ok('opening one room card closes every other one',
+       !G.roomIsOpen(oA)&&G.roomIsOpen(oB),
+       'A open: '+G.roomIsOpen(oA)+', B open: '+G.roomIsOpen(oB));
+    ok('and a finished room that was open for editing closes with them',
+       !S.roomEdit[oA.id],'still flagged for editing');
+    S.rooms=[]; S.roomOpen={}; S.roomEdit={};
+
     /* the fan question, while it is still blocking the room */
     S.rooms=[]; S.fixtures=[]; S.roomPid={}; S.roomFan={}; S.roomComfort={}; S.roomOpen={};
     var aBed={id:'aB',type:'bedroom',x:0,y:0,w:3.5*PX,h:4*PX};

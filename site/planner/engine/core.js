@@ -1891,6 +1891,17 @@ function roomIsDone(r){
   var rec=recommendForRoom(r);
   return rec&&rec.n ? n>=rec.n : true;
 }
+/* One room card open at a time, and that includes a finished room somebody
+   opened back up to edit. Marking a new room, or opening another card, shuts
+   every other one - six cards open down the rail is the "too much, it gets
+   confusing" report, and it buries the room actually in front of you. */
+function closeOtherRooms(keepId){
+  S.rooms.forEach(function(x){
+    if(x.id===keepId) return;
+    S.roomOpen[x.id]=false;
+    delete S.roomEdit[x.id];
+  });
+}
 // Collapsed once finished, unless the person has opened it back up themselves.
 function roomIsOpen(r){
   /* Done means done: one small row in the finished list. The only way a
@@ -1982,8 +1993,8 @@ function renderDoneRooms(){
   body.querySelectorAll('[data-doneedit]').forEach(function(b){
     b.onclick=function(){
       var id=b.dataset.doneedit;
-      S.rooms.forEach(function(x){ delete S.roomEdit[x.id]; });   /* one at a time */
-      S.roomEdit[id]=true; S.hiRoom=id;
+      closeOtherRooms(id);                    /* one at a time */
+      S.roomEdit[id]=true; S.roomOpen[id]=true; S.hiRoom=id;
       openStep(3); renderAll(); flashRoom(id);
       var card=document.querySelector('[data-toggle="'+id+'"]');
       if(card&&card.scrollIntoView) card.scrollIntoView({block:'center',behavior:'smooth'});
@@ -2326,9 +2337,8 @@ function renderRoomList(){
         /* Toggling a finished room is really toggling "I want to edit this". */
         if(opening) S.roomEdit[id]=true; else delete S.roomEdit[id];
       }
-      /* One room open at a time. Six cards open at once was the rail people
-         called "too much on the side", and it buried the room being worked on. */
-      S.rooms.forEach(function(x){ S.roomOpen[x.id]=(opening&&x.id===id); });
+      closeOtherRooms(opening?id:null);
+      S.roomOpen[id]=!!opening;
       S.hiRoom=opening?id:null;
       renderRooms();
       renderRoomList();
@@ -3207,7 +3217,11 @@ function onUp(e){
     if(w<12||h<12){toast('That box is too small \u2014 try again, corner to corner');return;}
     snapshot();
     var nr={id:'r'+(S.seq++),type:S.roomType,x:x,y:y,w:w,h:h};
-    S.rooms.push(nr); delete S.roomOpen[nr.id];
+    S.rooms.push(nr);
+    /* Every other card shuts, so the rail is the room just drawn and the
+       finished rooms as one-line rows underneath it. */
+    closeOtherRooms(nr.id);
+    S.roomOpen[nr.id]=true;
     /* They answered the fan question before marking anything up, so a room
        that can take a fan starts with that answer already in it. */
     var nb=ROOMS[nr.type]||ROOMS.other;
@@ -4475,7 +4489,7 @@ window.__GH={
       renderPlaceTeach();
     }
   },
-  doFill:doFill,garageFitting:garageFitting,roomIsDone:roomIsDone,roomIsOpen:roomIsOpen,roomFittings:roomFittings,recommendForRoom:recommendForRoom,renderAll:renderAll,roomSummary:roomSummary,doPrint:doPrint,init:init,composePNG:composePNG,composeExport:composeExport,canvasToPdfBlob:canvasToPdfBlob,scheduleText:scheduleText,
+  doFill:doFill,garageFitting:garageFitting,roomIsDone:roomIsDone,roomIsOpen:roomIsOpen,closeOtherRooms:closeOtherRooms,roomFittings:roomFittings,recommendForRoom:recommendForRoom,renderAll:renderAll,roomSummary:roomSummary,doPrint:doPrint,init:init,composePNG:composePNG,composeExport:composeExport,canvasToPdfBlob:canvasToPdfBlob,scheduleText:scheduleText,
   fit:fitView,fitBox:fitBox,contentBox:contentBox,padBox:padBox,mainSpan:mainSpan,toolState:toolState,groupPointsAt:groupPointsAt,calRefLength:calRefLength,applyScale:applyScale,renderPdfPager:renderPdfPager,zoomStep:zoomStep,clampPan:clampPan,wheelIntent:wheelIntent,zoomTo:zoomTo,showHelp:showHelp,renderTools:renderTools,recommendProduct:recommendProduct,bestValue:bestValue,showModal:showModal
 };
 
