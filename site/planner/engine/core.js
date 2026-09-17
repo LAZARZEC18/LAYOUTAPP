@@ -84,6 +84,9 @@ function clamp(v,a,b){return Math.min(b,Math.max(a,v));}
    at downlight spacing (1.5 m+) spread a "starlit ceiling" across half a house
    and read as nothing at all. */
 var STAR_SPACING_M=0.5;
+/* Six star lights is the run we sell. Beyond that it stops reading as a line
+   of points in the ceiling and starts looking like a fault. */
+var STAR_MAX=6;
 function isStarLight(p){
   return !!p && (p.cat==='star' || /star\s?light/i.test(p.name||''));
 }
@@ -284,10 +287,18 @@ function fillPoints(w,h,spacing,off){
 /* `exact` is for a room whose count is pinned rather than suggested - a
    bathroom is two lights whatever it measures, so the grid search is not
    allowed to quietly settle on one. */
+/* The gap you want at the wall is half the gap between the fittings - that is
+   what makes a grid read as evenly divided. Holding the offset at the flat
+   650-750 mm rule on both axes left the middle of the room with a gap twice as
+   wide as the ones at the walls, which is what looks wrong on a plan. So the
+   offset is allowed to grow to the even-division point, but never tighter than
+   the rule and never more than 1.1 m off a wall. */
+function axisOffset(len,n,off){
+  if(n<=1) return len/2;
+  return clamp(len/(2*n), off, Math.max(off,1.1));
+}
 function gridInRoom(w,h,n,off,exact){
   if(n<=0) return [];
-  off=exact ? Math.min(off, w/4, h/4) : Math.min(off, w/3, h/3);
-  var uw=Math.max(0,w-2*off), uh=Math.max(0,h-2*off);
   var target=spacingFor(S.ceiling, 100);      /* the spacing we aim for */
 
   var best=null, c, r;
@@ -298,8 +309,8 @@ function gridInRoom(w,h,n,off,exact){
          real cost. Bigger rooms can move by two to square the grid off. */
       var slack = exact ? 0 : (n<=4 ? 1 : 2);
       if(Math.abs(total-n)>slack) continue;
-      var sx = c===1 ? w : uw/(c-1);
-      var sy = r===1 ? h : uh/(r-1);
+      var sx = c===1 ? w : (w-2*axisOffset(w,c,off))/(c-1);
+      var sy = r===1 ? h : (h-2*axisOffset(h,r,off))/(r-1);
       /* Prefer even spacing in both directions, spacing near the rule of
          thumb, and a count close to the recommendation - in that order. */
       var score = Math.abs(sx-sy)*1.0
@@ -311,12 +322,14 @@ function gridInRoom(w,h,n,off,exact){
     }
   }
 
-  var pts=[], x, y, i, j;
+  var pts=[], x, y, i, j, ox, oy, uw, uh;
   if(best){
+    ox=axisOffset(w,best.c,off); oy=axisOffset(h,best.r,off);
+    uw=Math.max(0,w-2*ox); uh=Math.max(0,h-2*oy);
     for(j=0;j<best.r;j++){
-      y = best.r===1 ? h/2 : off + j*uh/(best.r-1);
+      y = best.r===1 ? h/2 : oy + j*uh/(best.r-1);
       for(i=0;i<best.c;i++){
-        x = best.c===1 ? w/2 : off + i*uw/(best.c-1);
+        x = best.c===1 ? w/2 : ox + i*uw/(best.c-1);
         pts.push({x:x,y:y});
       }
     }
@@ -327,11 +340,13 @@ function gridInRoom(w,h,n,off,exact){
      it reads as deliberate rather than as a missing fitting. */
   var cols=clamp(Math.round(Math.sqrt(n*(w/h))),1,n);
   var rows=Math.ceil(n/cols), cnt, span, x0;
+  ox=axisOffset(w,cols,off); oy=axisOffset(h,rows,off);
+  uw=Math.max(0,w-2*ox); uh=Math.max(0,h-2*oy);
   for(j=0;j<rows;j++){
     cnt = (j<rows-1)? cols : (n-cols*(rows-1));
-    y = rows===1 ? h/2 : off + j*uh/(rows-1);
+    y = rows===1 ? h/2 : oy + j*uh/(rows-1);
     span = cols>1 ? uw*(cnt-1)/(cols-1) : 0;
-    x0 = off + (uw-span)/2;
+    x0 = ox + (uw-span)/2;
     for(i=0;i<cnt;i++){
       x = cnt===1 ? w/2 : x0 + i*span/(cnt-1);
       pts.push({x:x,y:y});
@@ -2218,6 +2233,7 @@ function renderRoomList(){
              ['ceiling','Ceiling & wall lights'],
              ['batten','Battens'],['star','Star lights']];
         var current=(roomFittingFor(r)||{}).id;
+        var recId=((recommendProduct(r.type)||{}).p||{}).id;
         var opts='';
         var takenInGroup={};
         groups.forEach(function(g){
@@ -2234,43 +2250,17 @@ function renderRoomList(){
           if(!list.length) return;
           opts+='<optgroup label="'+g[1]+'">'+list.map(function(pp){
             return '<option value="'+pp.id+'"'+(pp.id===current?' selected':'')+'>'+
-                   esc(pickerLabel(pp))+'</option>';
+                   esc(pickerLabel(pp))+(pp.id===recId?' \u2014 our pick':'')+'</option>';
           }).join('')+'</optgroup>';
         });
         if(!opts) return '';
-        /* Three or four plain choices, ours first and already ticked. Every
-           other fitting is still one click away under "Show every light",
-           but nobody has to read a hundred product names to light a bedroom. */
-        var flat=[], seenFlat={};
-        groups.forEach(function(g){
-          var list=pickerGroupProducts(g[0]);
-          if(fanRoom) list=list.filter(function(pp){return fittingClass(pp)==='lg';});
-          list.forEach(function(pp){ if(!seenFlat[pp.id]){ seenFlat[pp.id]=1; flat.push(pp); } });
-        });
-        var rp=recommendProduct(r.type);
-        var short=[], seen={};
-        function add(pp,tag){
-          if(!pp||seen[pp.id]) return;
-          if(!flat.some(function(x){return x.id===pp.id;})) return;
-          seen[pp.id]=1; short.push({p:pp,tag:tag});
-        }
-        if(rp&&rp.p) add(rp.p,'Our pick');
-        add(byId(current),'');
-        flat.forEach(function(pp){ if(short.length<4) add(pp,''); });
-        var rows=short.map(function(s){
-          var on=s.p.id===current;
-          return '<label class="ropt'+(on?' on':'')+'">'+
-            '<input type="radio" name="rl-'+r.id+'" value="'+s.p.id+'" data-roomlightpick="'+r.id+'"'+
-            (on?' checked':'')+'>'+
-            '<span><b>'+esc(plainName(s.p))+(s.tag?'<span class="rtag">'+s.tag+'</span>':'')+'</b>'+
-            '<em>'+esc(lightBlurb(s.p))+'</em></span></label>';
-        }).join('');
-        return '<div class="rsub">The light in this room</div>'+rows+
-          '<details class="rmore"'+(S.roomMoreOpen[r.id]?' open':'')+' data-roommore="'+r.id+'">'+
-            '<summary>Show every light we sell</summary>'+
-            '<div class="rmore-body"><div class="selwrap"><select class="sel" id="rl-'+r.id+'" '+
-            'data-roomlight="'+r.id+'">'+opts+'</select></div></div>'+
-          '</details>';
+        /* One line, the way the room type above it is one line. The four tall
+           cards and the "show every light" fold under them said the same thing
+           three times over and pushed the green button off the screen - the
+           room card is meant to be read at a glance, not scrolled. */
+        return '<div class="rsub">The light in this room</div>'+
+          '<div class="selwrap"><select class="sel" id="rl-'+r.id+'" '+
+          'data-roomlight="'+r.id+'">'+opts+'</select></div>';
       })()+
       /* One green button, and it says what pressing it will do in words -
          not "(2 standard)", which meant nothing to anyone who had not read
@@ -2415,21 +2405,11 @@ function renderRoomList(){
   /* Changing the fitting from inside the room card re-lays that room straight
      away, so you see the new count and spacing instead of having to press
      re-fill afterwards. */
-  w.querySelectorAll('[data-roomlightpick]').forEach(function(rb){
-    rb.onchange=function(){
-      var r=S.rooms.filter(function(x){return x.id===rb.dataset.roomlightpick;})[0];
-      applyRoomLight(r,byId(rb.value));
-    };
-  });
-  w.querySelectorAll('[data-roommore]').forEach(function(d){
-    d.addEventListener('toggle',function(){ S.roomMoreOpen[d.dataset.roommore]=d.open; });
-  });
   w.querySelectorAll('[data-roomlight]').forEach(function(sel){
     sel.onchange=function(){
       var r=S.rooms.filter(function(x){return x.id===sel.dataset.roomlight;})[0];
       var p=byId(sel.value);
       if(!r||!p) return;
-      S.roomMoreOpen[r.id]=true;
       applyRoomLight(r,p);
     };
   });
@@ -2596,7 +2576,7 @@ var SPECIAL={
        people picking it as the light for a bedroom. Outside is where it does
        a real job - entries, alfresco walls, along a path. */
     label:'Outdoor wall lights', icon:'◨', pid:'MR10-CCT-WALL-B',
-    blurb:'For outside walls \u2014 entries, the alfresco, along a path. They bolt to the wall and throw light out in front of them, about 180\u00b0, and nothing behind. Drop one and it points away from the nearest wall on its own.',
+    blurb:'For outside walls \u2014 entries, the alfresco, along a path. They throw light out in front, about 180\u00b0, and nothing behind.',
     steps:['Pick which one.',
            'Click the plan against the outside wall you want it on.',
            'Drag the green arrow to turn it. Drag the light itself to move it.'],
@@ -2622,7 +2602,7 @@ var SPECIAL={
          '<circle cx="12" cy="18.1" r="1.6" fill="currentColor"/>'+
          '</svg>',
     own:true,
-    blurb:'A pendant you are supplying yourself — over an island bench, a dining table or a stairwell. Put it on the plan so your electrician knows where to leave the point.',
+    blurb:'A pendant you are supplying yourself \u2014 over an island, a dining table, a stairwell. On the plan so your electrician leaves the point.',
     steps:['Type what it is called.',
            'Type what it cost (or leave it at 0).',
            'Click the plan where it hangs.'],
@@ -2723,6 +2703,9 @@ function applySpecial(){
   }else{
     if(!s.choices || !s.choices.some(function(c){return c.id===S.pick.pid;})) S.pick.pid=s.pid;
     if(s.counts){
+      var mx=s.counts[s.counts.length-1];
+      if(!(S.pick.qty>=1)) S.pick.qty=1;
+      if(S.pick.qty>mx) S.pick.qty=mx;
       S.pick.arr=(specArr==='col')?'col':'row';
     }else{ S.pick.qty=1; S.pick.arr='row'; }
   }
@@ -2734,10 +2717,22 @@ function applySpecial(){
 
 function placeGroupAt(x,y){
   var p=byId(S.pick.pid); if(!p) return;
+  if(isStarLight(p) && S.pick.qty>STAR_MAX) S.pick.qty=STAR_MAX;
   /* They all land in one go and they stay together. Star lights especially -
      dropping six of them one click at a time, then trying to keep them evenly
      spaced by hand, was the job nobody could finish. */
   addFixtures(groupPointsAt(x,y));   /* star runs group themselves in addFixtures */
+  if(specPick){
+    /* An extra is one thing you place, not a brush you paint with. Putting the
+       tool down the moment it lands means the next touch picks the light up -
+       to slide it over, or to swing a wall light round - instead of dropping a
+       second one beside it. */
+    setTool('select');
+    toast(isWallLight(p)
+      ? niceName(p)+' placed \u2014 drag it to move it, or drag the arrow to turn it'
+      : S.pick.qty+' \u00d7 '+niceName(p)+' placed \u2014 drag to move');
+    return;
+  }
   toast(S.pick.qty+' × '+niceName(p)+' placed');
 }
 /* pickDefaultDownlight and relayRoomsForPick are gone. Both existed because
@@ -2883,8 +2878,11 @@ function setTool(t){
   $('#btn-cal').textContent=t==='scale'?'Now drag the 2 red points…':'Put 2 points on the plan';
   $('#btn-room').textContent=t==='room'?'Now drag a box on the plan…':'Drag a box around the room';
   var msg=armedMessage(t);
-  $('#armed').hidden=!msg;
-  if(msg) $('#armedmsg').textContent=msg;
+  /* The how-to card already says what to do and carries its own close button,
+     so the green cancel strip on top of it was one instruction too many. */
+  var cardUp=!!specPick;
+  $('#armed').hidden=!msg||cardUp;
+  if(msg&&!cardUp) $('#armedmsg').textContent=msg;
   /* Arming the scale tool drops the two red points on the plan. Leaving it
      takes them away again so they cannot be confused with a fitting. */
   if(t!=='place'){ hideHowTo(); if(specPick){ specPick=null; if(typeof renderSpecial==='function') renderSpecial(); } }
