@@ -738,6 +738,14 @@
 .gh-planner .checklist p{font-size:14.5px;color:#5d6151;line-height:1.55}
 
 .gh-planner .tut-foot{display:flex;align-items:center;gap:16px;padding:14px 30px;border-top:1px solid var(--line-soft);background:var(--paper)}
+/* The live chat bubble is fixed to the bottom right of the window and was
+   sitting on top of Next (Keri, 18 Sep). Keep the chat where it is - people
+   want it most while they are learning the tool - and move the buttons in
+   far enough to clear it. */
+.gh-planner .tut-foot{padding-right:104px}
+@media (max-width:560px){.gh-planner .tut-foot{padding-right:92px;padding-left:14px;gap:8px}
+  .gh-planner .tut-foot .act{padding:12px 16px;font-size:14px}}
+
 .gh-planner .tut-foot .count{
   font-family:"JetBrains Mono",monospace;font-size:11px;letter-spacing:.08em;color:var(--muted);
   margin:0 auto;display:flex;align-items:center;gap:9px;
