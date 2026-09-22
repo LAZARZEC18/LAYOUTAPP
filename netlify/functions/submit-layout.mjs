@@ -70,36 +70,10 @@ export default async (req) => {
     catch { /* best effort */ }
   }
 
-  /* Email notification, via Netlify Forms: post a "plan-submission" form entry
-     on our own site. Netlify's form notification (configured once in the UI:
-     Forms → plan-submission → Notifications → add email) then emails the team
-     with the customer's details and direct links to the plan. Non-fatal — a
-     failed notification never loses the stored plan. */
-  try {
-    const origin = new URL(req.url).origin;
-    const body = new URLSearchParams({
-      'form-name': 'plan-submission',
-      name: meta.name,
-      email: meta.email,
-      phone: meta.phone,
-      suburb: meta.suburb,
-      project: meta.project,
-      fittings: String(meta.fittings),
-      total_inc_gst: '$' + (+meta.totalIncGst || 0).toFixed(2),
-      view_in_admin: origin + '/layout-admin/?open=' + id,
-      open_in_planner: origin + '/layout-app/?load=' + id,
-    });
-    await fetch(origin + '/', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: body.toString(),
-    });
-  } catch { /* notification is best-effort */ }
-
-  /* Direct email too, through Greenhse's own mail endpoint (the contact form
-     and strip-light quote requests use the same one), with the customer's
-     details and the full quote - so the team gets it whether or not the
-     Netlify Forms notification above is configured. Non-fatal. */
+  /* Email: Lazar, 22 Sep - "when the layout app is submitted it sends only to
+     lazarzec@yahoo.com". One email, through Greenhse's own mail endpoint, to
+     that address alone (admin copy off). Non-fatal: a failed email never
+     loses the stored plan. */
   try { await emailSubmission(req, id, meta, payload); } catch { /* best effort */ }
 
   return json({ ok: true, id });
@@ -164,10 +138,8 @@ async function emailSubmission(req, id, meta, payload) {
 
   const fd = new FormData();
   fd.append('submit', 'true');
-  fd.append('admin', 'true');
-  /* Lazar, 22 Sep: "it needs to send to email lazarzec@yahoo.com". The
-     endpoint mails its admin inbox and the address given here; the
-     customer's own details are in the body, never in these fields. */
+  fd.append('admin', 'false');           /* no copy to the Greenhse admin inbox */
+  /* The customer's own details are in the body, never in these fields. */
   fd.append('name', 'Lighting Layout App');
   fd.append('email', NOTIFY_EMAIL);
   fd.append('phone', '');
