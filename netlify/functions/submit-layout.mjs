@@ -106,6 +106,7 @@ export default async (req) => {
 };
 
 const MAIL_ENDPOINT = 'https://www.getestimate.greenhse.com/api/smtp-email-test.php';
+const NOTIFY_EMAIL = 'lazarzec@yahoo.com';
 const money = (v) => '$' + (Math.round((+v || 0) * 100) / 100).toLocaleString('en-AU',
   { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g,
@@ -164,11 +165,11 @@ async function emailSubmission(req, id, meta, payload) {
   const fd = new FormData();
   fd.append('submit', 'true');
   fd.append('admin', 'true');
-  /* Sender fields stay ours: the endpoint may copy the "email" address in,
-     and this message carries admin links. The customer's details are in the
-     body. */
+  /* Lazar, 22 Sep: "it needs to send to email lazarzec@yahoo.com". The
+     endpoint mails its admin inbox and the address given here; the
+     customer's own details are in the body, never in these fields. */
   fd.append('name', 'Lighting Layout App');
-  fd.append('email', 'noreply@greenhse.com');
+  fd.append('email', NOTIFY_EMAIL);
   fd.append('phone', '');
   fd.append('subject', 'Layout plan sent by ' + String(c.name || 'a customer').slice(0, 80) +
     (meta.project ? ' - ' + meta.project : '') + ' - ' + money(inc) + ' inc GST');

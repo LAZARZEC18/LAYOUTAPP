@@ -42,62 +42,9 @@ export default async (req) => {
   };
 
   const store = getStore('layouts');
-
-  /* First draft for this session = a NEW PLAN HAS STARTED. Email the team
-     once (Lazar, 22 Sep: "whenever a new plan starts it sends us an email").
-     Later drafts from the same session update the blob quietly. The email
-     goes through Greenhse's own mail endpoint - the same one the contact
-     form and strip-light quote requests use - so it lands in the same inbox.
-     Non-fatal: a failed email never loses the draft. */
-  let isNew = false;
-  try { isNew = !(await store.get('dmeta/' + sid)); } catch { isNew = true; }
-
   await store.setJSON('drafts/' + sid, { planData: p.planData, project: meta.project });
   await store.setJSON('dmeta/' + sid, meta);
-
-  if (isNew) {
-    try { await notifyPlanStarted(req, meta); } catch { /* best effort */ }
-  }
   return json({ ok: true });
 };
-
-const MAIL_ENDPOINT = 'https://www.getestimate.greenhse.com/api/smtp-email-test.php';
-
-async function notifyPlanStarted(req, meta) {
-  const origin = new URL(req.url).origin;
-  const when = new Date().toLocaleString('en-AU', {
-    timeZone: 'Australia/Perth', weekday: 'short', day: '2-digit', month: 'short',
-    hour: '2-digit', minute: '2-digit',
-  });
-  const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g,
-    (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-  const adminUrl = origin + '/layout-admin/';
-  const openUrl = origin + '/layout-app/?draft=' + encodeURIComponent(meta.sid);
-  const html =
-    '<div style="font-family:Arial,sans-serif;line-height:1.6;color:#14150f">' +
-    '<p style="font-size:16px;margin:0 0 12px"><strong>Someone has started a new plan in the Lighting Layout App.</strong></p>' +
-    '<p style="margin:0 0 4px"><strong>When:</strong> ' + esc(when) + ' (Perth)</p>' +
-    '<p style="margin:0 0 4px"><strong>Project name:</strong> ' + (esc(meta.project) || '<em>not named yet</em>') + '</p>' +
-    '<p style="margin:0 0 4px"><strong>So far:</strong> ' + meta.rooms + ' room' + (meta.rooms === 1 ? '' : 's') +
-    ', ' + meta.fittings + ' fitting' + (meta.fittings === 1 ? '' : 's') + '</p>' +
-    '<p style="margin:0 0 14px"><strong>Session:</strong> ' + esc(meta.sid) + '</p>' +
-    '<p style="margin:14px 0 4px"><a href="' + adminUrl + '" style="color:#00a800">Watch it in the layout admin</a></p>' +
-    '<p style="margin:0 0 14px"><a href="' + openUrl + '" style="color:#00a800">Open the draft in the planner</a> (admin key needed)</p>' +
-    '<p style="color:#666;font-size:12px;margin:0">No contact details exist yet - they arrive when the customer presses Send to Greenhse, ' +
-    'which sends a second email with the full plan and quote.</p>' +
-    '</div>';
-
-  const fd = new FormData();
-  fd.append('submit', 'true');
-  fd.append('admin', 'true');
-  fd.append('name', 'Lighting Layout App');
-  fd.append('email', 'noreply@greenhse.com');
-  fd.append('phone', '');
-  fd.append('subject', 'New layout plan started' + (meta.project ? ': ' + meta.project : '') + ' - ' + when);
-  fd.append('message', html);
-  fd.append('env', 'true');
-  const r = await fetch(MAIL_ENDPOINT, { method: 'POST', headers: { Accept: 'application/json' }, body: fd });
-  if (!r.ok) throw new Error('mail ' + r.status);
-}
 
 export const config = { path: '/api/draft' };
