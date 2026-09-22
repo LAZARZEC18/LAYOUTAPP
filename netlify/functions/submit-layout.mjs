@@ -70,21 +70,24 @@ export default async (req) => {
     catch { /* best effort */ }
   }
 
-  /* Email: Lazar, 22 Sep - "when the layout app is submitted it sends only to
-     lazarzec@yahoo.com". One email, through Greenhse's own mail endpoint, to
-     that address alone (admin copy off). Non-fatal: a failed email never
-     loses the stored plan. */
+  /* Email to Lazar only (see emailSubmission). Non-fatal: a failed email
+     never loses the stored plan. */
   try { await emailSubmission(req, id, meta, payload); } catch { /* best effort */ }
 
   return json({ ok: true, id });
 };
 
-const MAIL_ENDPOINT = 'https://www.getestimate.greenhse.com/api/smtp-email-test.php';
+/* Lazar, 22 Sep: the submission email must go ONLY to lazarzec@yahoo.com and
+   must not touch any Greenhse mailbox. Greenhse's own mail script always
+   copies its admin inbox and ignores the address it is given (test 3 proved
+   it), so it is not used here at all. This posts to FormSubmit
+   (formsubmit.co), a keyless relay that emails the address in the URL. The
+   first submission makes FormSubmit send a one-time activation email to that
+   address; once Lazar clicks "Activate", every later submission is delivered. */
 const NOTIFY_EMAIL = 'lazarzec@yahoo.com';
+const MAIL_ENDPOINT = 'https://formsubmit.co/ajax/' + NOTIFY_EMAIL;
 const money = (v) => '$' + (Math.round((+v || 0) * 100) / 100).toLocaleString('en-AU',
   { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g,
-  (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
 async function emailSubmission(req, id, meta, payload) {
   const origin = new URL(req.url).origin;
@@ -98,56 +101,39 @@ async function emailSubmission(req, id, meta, payload) {
     timeZone: 'Australia/Perth', weekday: 'short', day: '2-digit', month: 'short',
     hour: '2-digit', minute: '2-digit',
   });
-  const td = 'padding:7px 10px;border-bottom:1px solid #e6e6e0;font-size:13px;vertical-align:top';
-  const th = 'padding:7px 10px;border-bottom:2px solid #14150f;font-size:11px;text-transform:uppercase;letter-spacing:.06em;text-align:left;color:#555';
-  const rows = lines.map((l) =>
-    '<tr><td style="' + td + '">' + esc(l.name) + '<br><span style="color:#777;font-size:11px">' + esc(l.code) + '</span></td>' +
-    '<td style="' + td + ';text-align:right">' + (+l.qty || 0) + '</td>' +
-    '<td style="' + td + ';text-align:right">' + money(l.unitExGst) + '</td>' +
-    '<td style="' + td + ';text-align:right">' + money(l.lineExGst) + '</td></tr>').join('');
   const rooms = ((payload.project && payload.project.rooms) || []).length;
-  const html =
-    '<div style="font-family:Arial,sans-serif;line-height:1.5;color:#14150f;max-width:640px">' +
-    '<p style="font-size:16px;margin:0 0 14px"><strong>A customer has sent a plan from the Lighting Layout App.</strong></p>' +
-    '<table style="border-collapse:collapse;margin:0 0 16px">' +
-    '<tr><td style="padding:2px 12px 2px 0;color:#555">Name</td><td><strong>' + esc(c.name) + '</strong></td></tr>' +
-    '<tr><td style="padding:2px 12px 2px 0;color:#555">Email</td><td>' + (c.email ? '<a href="mailto:' + esc(c.email) + '">' + esc(c.email) + '</a>' : '-') + '</td></tr>' +
-    '<tr><td style="padding:2px 12px 2px 0;color:#555">Phone</td><td>' + (c.phone ? '<a href="tel:' + esc(c.phone) + '">' + esc(c.phone) + '</a>' : '-') + '</td></tr>' +
-    '<tr><td style="padding:2px 12px 2px 0;color:#555">Suburb</td><td>' + (esc(c.suburb) || '-') + '</td></tr>' +
-    '<tr><td style="padding:2px 12px 2px 0;color:#555">Job type</td><td>' + (esc(c.jobType) || '-') + '</td></tr>' +
-    '<tr><td style="padding:2px 12px 2px 0;color:#555">Project</td><td>' + (esc(meta.project) || '-') + '</td></tr>' +
-    '<tr><td style="padding:2px 12px 2px 0;color:#555">Sent</td><td>' + esc(when) + ' (Perth)</td></tr>' +
-    '<tr><td style="padding:2px 12px 2px 0;color:#555">Rooms / fittings</td><td>' + rooms + ' / ' + (+meta.fittings || 0) + '</td></tr>' +
-    '</table>' +
-    (c.notes ? '<p style="margin:0 0 16px"><strong>Notes:</strong> ' + esc(c.notes) + '</p>' : '') +
-    '<h3 style="font-size:14px;margin:0 0 6px">Quote</h3>' +
-    '<table style="border-collapse:collapse;width:100%;margin:0 0 6px">' +
-    '<thead><tr><th style="' + th + '">Item</th><th style="' + th + ';text-align:right">Qty</th>' +
-    '<th style="' + th + ';text-align:right">Unit ex GST</th><th style="' + th + ';text-align:right">Line ex GST</th></tr></thead>' +
-    '<tbody>' + (rows || '<tr><td colspan="4" style="' + td + '">No fittings</td></tr>') + '</tbody>' +
-    '<tfoot>' +
-    '<tr><td colspan="3" style="padding:6px 10px;text-align:right;color:#555">Subtotal ex GST</td><td style="padding:6px 10px;text-align:right">' + money(ex) + '</td></tr>' +
-    '<tr><td colspan="3" style="padding:2px 10px;text-align:right;color:#555">GST 10%</td><td style="padding:2px 10px;text-align:right">' + money(gst) + '</td></tr>' +
-    '<tr><td colspan="3" style="padding:8px 10px;text-align:right;font-weight:bold;border-top:2px solid #14150f">Total inc GST</td>' +
-    '<td style="padding:8px 10px;text-align:right;font-weight:bold;border-top:2px solid #14150f;font-size:15px">' + money(inc) + '</td></tr>' +
-    '</tfoot></table>' +
-    '<p style="color:#666;font-size:11px;margin:0 0 16px">Indicative only - catalogue rates, excludes cable, downlight kits and labour.</p>' +
-    '<p style="margin:0 0 4px"><a href="' + origin + '/layout-admin/?open=' + encodeURIComponent(id) + '" style="color:#00a800">View in the layout admin</a></p>' +
-    '<p style="margin:0"><a href="' + origin + '/layout-app/?load=' + encodeURIComponent(id) + '" style="color:#00a800">Open the plan in the planner</a> (admin key needed)</p>' +
-    '</div>';
+  const quote = lines.length
+    ? lines.map((l) => (+l.qty || 0) + ' x ' + l.name + ' [' + l.code + '] @ ' + money(l.unitExGst) +
+        ' = ' + money(l.lineExGst)).join('\n')
+    : 'No fittings';
 
-  const fd = new FormData();
-  fd.append('submit', 'true');
-  fd.append('admin', 'false');           /* no copy to the Greenhse admin inbox */
-  /* The customer's own details are in the body, never in these fields. */
-  fd.append('name', 'Lighting Layout App');
-  fd.append('email', NOTIFY_EMAIL);
-  fd.append('phone', '');
-  fd.append('subject', 'Layout plan sent by ' + String(c.name || 'a customer').slice(0, 80) +
-    (meta.project ? ' - ' + meta.project : '') + ' - ' + money(inc) + ' inc GST');
-  fd.append('message', html);
-  fd.append('env', 'true');
-  const r = await fetch(MAIL_ENDPOINT, { method: 'POST', headers: { Accept: 'application/json' }, body: fd });
+  const body = {
+    _subject: 'Layout plan sent by ' + String(c.name || 'a customer').slice(0, 80) +
+      (meta.project ? ' - ' + meta.project : '') + ' - ' + money(inc) + ' inc GST',
+    _template: 'table',
+    _captcha: 'false',
+    'Customer': String(c.name || ''),
+    'Email': String(c.email || '-'),
+    'Phone': String(c.phone || '-'),
+    'Suburb': String(c.suburb || '-'),
+    'Job type': String(c.jobType || '-'),
+    'Project': String(meta.project || '-'),
+    'Sent': when + ' (Perth)',
+    'Rooms / fittings': rooms + ' / ' + (+meta.fittings || 0),
+    'Notes': String(c.notes || '-'),
+    'Quote (ex GST)': quote,
+    'Subtotal ex GST': money(ex),
+    'GST 10%': money(gst),
+    'TOTAL inc GST': money(inc),
+    'View in layout admin': origin + '/layout-admin/?open=' + encodeURIComponent(id),
+    'Open in planner (admin key needed)': origin + '/layout-app/?load=' + encodeURIComponent(id),
+    'Note': 'Indicative only - catalogue rates, excludes cable, downlight kits and labour.',
+  };
+  const r = await fetch(MAIL_ENDPOINT, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    body: JSON.stringify(body),
+  });
   if (!r.ok) throw new Error('mail ' + r.status);
 }
 
