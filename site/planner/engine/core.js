@@ -3666,76 +3666,159 @@ function composeExport(cb){
     img.src=base;
   });
 }
-/* Page 2 of the export: everything that used to sit under the plan, on its
-   own clean page. Width matches the plan page so both PDF pages print at
-   the same scale; height is at least A4-shaped so a short list still looks
-   like a document page rather than a strip. */
+/* Page 2 of the export: the QUOTE. Lazar, 22 Sep: "when we save png and save
+   any sort of way it comes up with the quote with individual prices and then
+   total prices and items, make it look nice". Width matches the plan page so
+   both PDF pages print at the same scale; height is at least A4-shaped. */
 function summaryCanvas(W){
   var lines=bomLines(), t=bomTotals(lines);
   var name=$('#projname').value||'Untitled plan';
-  var fs=Math.max(20,Math.round(W/72));
-  var lh=Math.round(fs*1.55), pad=Math.round(fs*1.8);
-  var body=[];
-  body.push({t:'LIGHTS USED',h:1});
-  if(lines.length) lines.forEach(function(l){
-    body.push({t:l.qty+' ×  '+l.name+'   ['+l.sku+']'});
+  var fs=Math.max(20,Math.round(W/72));          /* body size */
+  var lh=Math.round(fs*1.5), pad=Math.round(fs*2.2);
+  var GREEN='#00c400', DARK='#14150f', INK='#14150f', SOFT='#5c6b62', LINE='#dedbd1', BAND='#f4f2ec';
+  var date=new Date().toLocaleDateString('en-AU',{day:'2-digit',month:'short',year:'numeric'});
+  var gst=Math.round((t.inc-t.ex)*100)/100;
+
+  /* rooms block */
+  var roomRows=[];
+  S.rooms.forEach(function(r){
+    var inR=S.fixtures.filter(function(f){return pointInRect(f.x,f.y,r);});
+    var byP={};
+    inR.forEach(function(f){var p=byId(f.pid);var k=p?p.name:String(f.pid);byP[k]=(byP[k]||0)+1;});
+    var a=roomAreaM2(r);
+    roomRows.push({name:roomName(r),area:a,n:inR.length,
+      list:Object.keys(byP).map(function(k){return byP[k]+' × '+k;}).join('  ·  ')});
   });
-  else body.push({t:'No fittings placed yet'});
-  body.push({t:'Total fittings: '+t.units+'   ·   Total inc GST: '+money(t.inc)});
-  if(S.rooms.length){
-    body.push({sp:1});
-    body.push({t:'BY ROOM',h:1});
-    S.rooms.forEach(function(r){
-      var inR=S.fixtures.filter(function(f){return pointInRect(f.x,f.y,r);});
-      var byP={};
-      inR.forEach(function(f){
-        var p=byId(f.pid);
-        var k=p?p.name+'   ['+(p.sku||p.id)+']':String(f.pid);
-        byP[k]=(byP[k]||0)+1;
-      });
-      var a=roomAreaM2(r);
-      body.push({t:roomName(r).toUpperCase()+
-        (a?'  ·  '+a.toFixed(1)+' m²':'')+
-        '  ·  '+inR.length+' light'+(inR.length===1?'':'s'),h:2});
-      Object.keys(byP).forEach(function(k){
-        body.push({t:'      '+byP[k]+' ×  '+k});
-      });
-    });
-  }
-  var contentH=pad*2 + fs + lh*2 +
-    body.reduce(function(a,b){return a+(b.sp?Math.round(lh*0.5):lh);},0);
+
+  /* ---- measure ---- */
+  var headerH=Math.round(fs*5.6);
+  var titleH=Math.round(lh*2.6);
+  var kvH=Math.round(lh*1.6);
+  var thH=Math.round(lh*1.2);
+  var rowH=Math.round(lh*1.75);
+  var rows=Math.max(lines.length,1);
+  var totalsH=Math.round(lh*3.6);
+  var roomsH=roomRows.length?Math.round(lh*1.4)+roomRows.length*Math.round(lh*1.8):0;
+  var noteH=Math.round(lh*3.2);
+  var contentH=headerH+pad+titleH+kvH+lh+thH+rows*rowH+totalsH+lh+roomsH+noteH+pad;
+
   var c=document.createElement('canvas');
   c.width=W; c.height=Math.max(Math.round(W*1.414),contentH);
   var ctx=c.getContext('2d');
   ctx.fillStyle='#ffffff';ctx.fillRect(0,0,c.width,c.height);
-  function fit(s){
-    s=String(s);
-    while(s.length>6&&ctx.measureText(s).width>W-pad*2) s=s.slice(0,-2);
-    return s;
+  var FONT='"Poppins","Helvetica Neue",Arial,sans-serif', MONO='"JetBrains Mono",Menlo,Consolas,monospace';
+  function font(px,bold,mono){ctx.font=(bold?'bold ':'')+px+'px '+(mono?MONO:FONT);}
+  function fit(s,maxW){
+    s=String(s==null?'':s);
+    if(ctx.measureText(s).width<=maxW) return s;
+    while(s.length>3&&ctx.measureText(s+'…').width>maxW) s=s.slice(0,-1);
+    return s+'…';
   }
-  var y=pad;
-  ctx.fillStyle='#14150f';
-  ctx.font='bold '+Math.round(fs*1.15)+'px monospace';
-  ctx.fillText(fit(name.toUpperCase()),pad,y+fs);
-  ctx.font=fs+'px monospace';
-  ctx.fillStyle='#5c6b62';
-  ctx.fillText(fit('Greenhse lighting plan  ·  '+
-    new Date().toLocaleDateString('en-AU',{day:'2-digit',month:'short',year:'numeric'})+
-    '  ·  ceiling '+S.ceiling.toFixed(2)+' m'),pad,y+fs+lh);
-  ctx.strokeStyle='#d8dcd2';ctx.lineWidth=2;
-  ctx.beginPath();
-  ctx.moveTo(pad,y+fs+Math.round(lh*1.6));
-  ctx.lineTo(W-pad,y+fs+Math.round(lh*1.6));
-  ctx.stroke();
-  y+=fs+lh*2;
-  body.forEach(function(b){
-    if(b.sp){y+=Math.round(lh*0.5);return;}
-    if(b.h===1){ctx.font='bold '+fs+'px monospace';ctx.fillStyle='#14512C';}
-    else if(b.h===2){ctx.font='bold '+fs+'px monospace';ctx.fillStyle='#14150f';}
-    else{ctx.font=fs+'px monospace';ctx.fillStyle='#14150f';}
-    ctx.fillText(fit(b.t),pad,y+fs);
-    y+=lh;
+  function text(s,x,y,align){ctx.textAlign=align||'left';ctx.fillText(s,x,y);ctx.textAlign='left';}
+  function hr(y,col,w){ctx.strokeStyle=col||LINE;ctx.lineWidth=w||2;ctx.beginPath();ctx.moveTo(pad,y);ctx.lineTo(W-pad,y);ctx.stroke();}
+
+  /* ---- header band ---- */
+  ctx.fillStyle=DARK;ctx.fillRect(0,0,W,headerH);
+  ctx.fillStyle=GREEN;ctx.fillRect(0,headerH-Math.round(fs*0.3),W,Math.round(fs*0.3));
+  ctx.fillStyle='#ffffff';font(Math.round(fs*1.9),true);
+  text('greenhse',pad,Math.round(headerH*0.5));
+  ctx.fillStyle=GREEN;font(Math.round(fs*0.72),false,true);
+  text('T E C H N O L O G I E S',pad,Math.round(headerH*0.5)+Math.round(fs*1.1));
+  ctx.fillStyle='#ffffff';font(Math.round(fs*1.05),true);
+  text('LIGHTING QUOTE',W-pad,Math.round(headerH*0.5)-Math.round(fs*0.75),'right');
+  ctx.fillStyle='#ffffffb3';font(Math.round(fs*0.85));
+  text('(08) 9297 2969',W-pad,Math.round(headerH*0.5)+Math.round(fs*0.45),'right');
+  text('greenhse.com',W-pad,Math.round(headerH*0.5)+Math.round(fs*1.6),'right');
+
+  var y=headerH+pad;
+  /* ---- title + meta ---- */
+  ctx.fillStyle=INK;font(Math.round(fs*1.7),true);
+  text(fit(name,W-pad*2),pad,y+Math.round(fs*1.5));
+  y+=titleH;
+  ctx.fillStyle=SOFT;font(Math.round(fs*0.9),false,true);
+  var meta=[date,'Ceiling '+S.ceiling.toFixed(2)+' m',S.rooms.length+' room'+(S.rooms.length===1?'':'s'),t.units+' fitting'+(t.units===1?'':'s')].join('   ·   ');
+  text(fit(meta,W-pad*2),pad,y+Math.round(fs*0.4));
+  y+=kvH;
+
+  /* ---- table ---- */
+  var cQty=W-pad-Math.round(fs*13), cUnit=W-pad-Math.round(fs*7.5), cLine=W-pad;
+  var cItem=pad, itemW=cQty-Math.round(fs*3)-cItem;
+  ctx.fillStyle=INK;font(Math.round(fs*1.05),true);
+  text('Items',pad,y+Math.round(fs*1.1));
+  y+=lh;
+  ctx.fillStyle=SOFT;font(Math.round(fs*0.7),true,true);
+  text('FITTING',cItem,y+Math.round(fs*0.8));
+  text('QTY',cQty,y+Math.round(fs*0.8),'right');
+  text('UNIT EX GST',cUnit,y+Math.round(fs*0.8),'right');
+  text('LINE EX GST',cLine,y+Math.round(fs*0.8),'right');
+  y+=thH;
+  hr(y,DARK,3);
+  if(!lines.length){
+    ctx.fillStyle=SOFT;font(fs);text('No fittings placed yet',cItem,y+Math.round(rowH*0.62));
+    y+=rowH;
+  }
+  lines.forEach(function(l,i){
+    if(i%2===1){ctx.fillStyle=BAND;ctx.fillRect(pad,y,W-pad*2,rowH);}
+    ctx.fillStyle=INK;font(fs);
+    text(fit(l.name,itemW),cItem,y+Math.round(rowH*0.48));
+    ctx.fillStyle=SOFT;font(Math.round(fs*0.72),false,true);
+    var sub=l.sku+(Object.keys(l.rooms).length?'   ·   '+Object.keys(l.rooms).map(function(k){return k+' ×'+l.rooms[k];}).join(', '):'');
+    text(fit(sub,itemW),cItem,y+Math.round(rowH*0.84));
+    ctx.fillStyle=INK;font(fs,false,true);
+    text(String(l.qty),cQty,y+Math.round(rowH*0.6),'right');
+    text(money(l.unit),cUnit,y+Math.round(rowH*0.6),'right');
+    font(fs,true,true);
+    text(money(l.line),cLine,y+Math.round(rowH*0.6),'right');
+    y+=rowH;
+    hr(y,LINE,1);
   });
+
+  /* ---- totals ---- */
+  y+=Math.round(lh*0.5);
+  var labX=cUnit;
+  ctx.fillStyle=SOFT;font(Math.round(fs*0.95));
+  text('Subtotal ex GST',labX,y+fs,'right');
+  ctx.fillStyle=INK;font(Math.round(fs*0.95),false,true);
+  text(money(t.ex),cLine,y+fs,'right');
+  y+=Math.round(lh*0.95);
+  ctx.fillStyle=SOFT;font(Math.round(fs*0.95));
+  text('GST 10%',labX,y+fs,'right');
+  ctx.fillStyle=INK;font(Math.round(fs*0.95),false,true);
+  text(money(gst),cLine,y+fs,'right');
+  y+=Math.round(lh*1.05);
+  var boxH=Math.round(lh*1.5), boxX=cUnit-Math.round(fs*9.5);
+  ctx.fillStyle=GREEN;ctx.fillRect(boxX,y,cLine-boxX,boxH);
+  ctx.fillStyle=DARK;font(Math.round(fs*0.95),true);
+  text('TOTAL INC GST',boxX+Math.round(fs*0.8),y+Math.round(boxH*0.64));
+  font(Math.round(fs*1.25),true,true);
+  text(money(t.inc),cLine-Math.round(fs*0.8),y+Math.round(boxH*0.66),'right');
+  y+=boxH+lh;
+
+  /* ---- by room ---- */
+  if(roomRows.length){
+    ctx.fillStyle=INK;font(Math.round(fs*1.05),true);
+    text('By room',pad,y+Math.round(fs*1.1));
+    y+=Math.round(lh*1.4);
+    var rh=Math.round(lh*1.8);
+    roomRows.forEach(function(r){
+      ctx.fillStyle=GREEN;ctx.fillRect(pad,y+Math.round(rh*0.2),Math.round(fs*0.25),Math.round(rh*0.6));
+      ctx.fillStyle=INK;font(Math.round(fs*0.95),true);
+      var head=r.name+(r.area?'  ·  '+r.area.toFixed(1)+' m²':'')+'  ·  '+r.n+' light'+(r.n===1?'':'s');
+      text(fit(head,W-pad*2-fs),pad+Math.round(fs*0.8),y+Math.round(rh*0.42));
+      ctx.fillStyle=SOFT;font(Math.round(fs*0.8));
+      text(fit(r.list||'No lights placed',W-pad*2-fs),pad+Math.round(fs*0.8),y+Math.round(rh*0.82));
+      y+=rh;
+    });
+  }
+
+  /* ---- footer note ---- */
+  var noteY=Math.max(y+lh,c.height-noteH-Math.round(pad*0.6));
+  hr(noteY,LINE,2);
+  ctx.fillStyle=SOFT;font(Math.round(fs*0.72));
+  text('Indicative only. Quantities and spacings come from the dimensions entered and standard lighting rules of thumb; prices are catalogue',pad,noteY+Math.round(lh*0.9));
+  text('rates ex GST unless shown. Excludes cable, downlight kits and labour. To be verified on site and installed by a licensed electrician.',pad,noteY+Math.round(lh*1.7));
+  ctx.fillStyle=SOFT;font(Math.round(fs*0.72),false,true);
+  text('Greenhse Technologies  ·  Ellenbrook, WA  ·  greenhse.com',pad,noteY+Math.round(lh*2.6));
   return c;
 }
 /* Wrap JPEGs of one or more canvases in a minimal multi-page PDF. Hand-built
@@ -4317,8 +4400,8 @@ function wire(){
       var base=(($('#projname').value||'plan').replace(/[^\w\- ]+/g,'')||'plan');
       download(base+'-plan.png',c.plan.toDataURL('image/png'));
       setTimeout(function(){
-        download(base+'-lights.png',c.summary.toDataURL('image/png'));
-        toast('2 PNGs downloaded \u2014 the plan, and the lights list');
+        download(base+'-quote.png',c.summary.toDataURL('image/png'));
+        toast('2 PNGs downloaded \u2014 the plan, and the quote');
       },350);
     });
   };
@@ -4330,7 +4413,7 @@ function wire(){
       var url=URL.createObjectURL(canvasToPdfBlob([c.plan,c.summary]));
       download((($('#projname').value||'plan').replace(/[^\w\- ]+/g,'')||'plan')+'.pdf',url);
       setTimeout(function(){URL.revokeObjectURL(url);},4000);
-      toast('PDF downloaded \u2014 plan on page 1, lights on page 2');
+      toast('PDF downloaded \u2014 plan on page 1, quote on page 2');
     });
   };
   $('#btn-open').onclick=function(){$('#loadfile').click();};
